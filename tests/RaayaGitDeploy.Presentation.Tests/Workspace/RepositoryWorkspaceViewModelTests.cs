@@ -83,6 +83,21 @@ public sealed class RepositoryWorkspaceViewModelTests
     }
 
     [Fact]
+    public async Task LoadDiffAsync_UsesPresentationPreviewSizeLimit()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var service = CreateService();
+        var viewModel = new RepositoryWorkspaceViewModel(service);
+        await viewModel.OpenRepositoryAsync(@"I:\Projects\sample", cancellationToken);
+
+        await viewModel.LoadDiffAsync(Assert.Single(viewModel.Changes), cancellationToken);
+
+        Assert.Equal(
+            RepositoryWorkspaceViewModel.MaxTextPreviewBytes,
+            service.DiffRequestedMaxPreviewBytes);
+    }
+
+    [Fact]
     public async Task GitFailure_SetsErrorMessageAndAlwaysResetsBusyState()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -138,6 +153,8 @@ public sealed class RepositoryWorkspaceViewModelTests
 
         public string? DiffRequestedBaseRef { get; private set; }
 
+        public long? DiffRequestedMaxPreviewBytes { get; private set; }
+
         public Task<GitRepositoryContext> GetContextAsync(
             string path,
             CancellationToken cancellationToken)
@@ -182,6 +199,20 @@ public sealed class RepositoryWorkspaceViewModelTests
             cancellationToken.ThrowIfCancellationRequested();
             DiffRequestedPath = path;
             DiffRequestedBaseRef = baseRef;
+            return Task.FromResult(DiffText);
+        }
+
+        public Task<string> GetDiffAsync(
+            string repositoryPath,
+            string path,
+            string? baseRef,
+            long maxUntrackedPreviewBytes,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            DiffRequestedPath = path;
+            DiffRequestedBaseRef = baseRef;
+            DiffRequestedMaxPreviewBytes = maxUntrackedPreviewBytes;
             return Task.FromResult(DiffText);
         }
     }
