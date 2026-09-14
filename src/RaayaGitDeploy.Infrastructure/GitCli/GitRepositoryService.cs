@@ -185,6 +185,12 @@ public sealed class GitRepositoryService : IGitRepositoryService
             return result.StandardOutput;
         }
 
+        var fileInfo = new FileInfo(fullPath);
+        if (fileInfo.Length > maxUntrackedPreviewBytes)
+        {
+            return string.Empty;
+        }
+
         var bytes = await File.ReadAllBytesAsync(fullPath, cancellationToken);
         if (bytes.Contains((byte)0))
         {
