@@ -41,3 +41,6 @@ jobs:
       # Microsoft Testing Platform returns exit code 8 when a test module contains zero tests.
       - name: Test Infrastructure
         run: dotnet test tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj --configuration Release --no-build
+
+      - name: Test Presentation
+        run: dotnet test tests/RaayaGitDeploy.Presentation.Tests/RaayaGitDeploy.Presentation.Tests.csproj --configuration Release --no-build
