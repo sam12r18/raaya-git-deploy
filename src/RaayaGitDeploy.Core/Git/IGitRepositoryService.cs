@@ -20,4 +20,11 @@ public interface IGitRepositoryService
         string path,
         string? baseRef,
         CancellationToken cancellationToken);
+
+    Task<string> GetDiffAsync(
+        string repositoryPath,
+        string path,
+        string? baseRef,
+        long maxUntrackedPreviewBytes,
+        CancellationToken cancellationToken);
 }
