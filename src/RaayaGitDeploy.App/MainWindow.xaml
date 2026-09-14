@@ -3,20 +3,5 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Raaya Git Deploy">
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-        <StackPanel
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Spacing="8">
-            <TextBlock
-                HorizontalAlignment="Center"
-                FontSize="26"
-                FontWeight="SemiBold"
-                Text="Raaya Git Deploy" />
-            <TextBlock
-                HorizontalAlignment="Center"
-                Opacity="0.72"
-                Text="Review · Verify · Deploy" />
-        </StackPanel>
-    </Grid>
+    <Grid x:Name="RootHost" />
 </Window>
