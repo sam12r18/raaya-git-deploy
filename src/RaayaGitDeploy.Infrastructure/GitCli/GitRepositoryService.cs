@@ -141,7 +141,50 @@ public sealed class GitRepositoryService : IGitRepositoryService
             throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
         }
 
-        return result.StandardOutput;
+        if (baseRef is not null || !string.IsNullOrEmpty(result.StandardOutput))
+        {
+            return result.StandardOutput;
+        }
+
+        var workingTreeChanges = await GetWorkingTreeChangesAsync(root, cancellationToken);
+        var isUntracked = workingTreeChanges.Any(change =>
+            change.Kind == GitChangeKind.Untracked &&
+            string.Equals(change.Path, path, StringComparison.Ordinal));
+
+        if (!isUntracked)
+        {
+            return result.StandardOutput;
+        }
+
+        var fullPath = Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(fullPath))
+        {
+            return result.StandardOutput;
+        }
+
+        var text = await File.ReadAllTextAsync(fullPath, cancellationToken);
+        return BuildAllAddedPreview(path, text);
+    }
+
+    private static string BuildAllAddedPreview(string path, string text)
+    {
+        var normalizedText = text.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var lines = normalizedText.Split('\n');
+        var lineCount = lines.Length > 0 && lines[^1].Length == 0
+            ? lines.Length - 1
+            : lines.Length;
+
+        var preview = new System.Text.StringBuilder();
+        preview.AppendLine("--- /dev/null");
+        preview.AppendLine($"+++ b/{path}");
+        preview.AppendLine($"@@ -0,0 +1,{lineCount} @@");
+
+        for (var index = 0; index < lineCount; index++)
+        {
+            preview.Append('+').AppendLine(lines[index]);
+        }
+
+        return preview.ToString();
     }
 
     private async Task<string> RunRequiredAsync(
