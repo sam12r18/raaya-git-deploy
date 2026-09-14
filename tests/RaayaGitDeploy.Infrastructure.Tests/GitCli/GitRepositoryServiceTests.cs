@@ -37,10 +37,30 @@ public sealed class GitRepositoryServiceTests
         }
         finally
         {
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, recursive: true);
-            }
+            DeleteDirectory(root);
         }
+    }
+
+    private static void DeleteDirectory(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+
+        foreach (var directory in Directory
+                     .EnumerateDirectories(path, "*", SearchOption.AllDirectories)
+                     .OrderByDescending(static directory => directory.Length))
+        {
+            File.SetAttributes(directory, FileAttributes.Normal);
+        }
+
+        File.SetAttributes(path, FileAttributes.Normal);
+        Directory.Delete(path, recursive: true);
     }
 }
