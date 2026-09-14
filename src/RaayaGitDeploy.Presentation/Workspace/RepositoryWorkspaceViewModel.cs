@@ -7,6 +7,8 @@ namespace RaayaGitDeploy.Presentation.Workspace;
 
 public partial class RepositoryWorkspaceViewModel : ObservableObject
 {
+    public const long MaxTextPreviewBytes = 256 * 1024;
+
     private readonly IGitRepositoryService _repositoryService;
     private ReviewSession? _reviewSession;
 
@@ -105,6 +107,7 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
                     repositoryPath,
                     item.Path,
                     BaseRef,
+                    MaxTextPreviewBytes,
                     cancellationToken);
             },
             cancellationToken);
