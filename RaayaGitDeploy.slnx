@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RaayaGitDeploy.App/RaayaGitDeploy.App.csproj" />
+    <Project Path="src/RaayaGitDeploy.Core/RaayaGitDeploy.Core.csproj" />
+    <Project Path="src/RaayaGitDeploy.Infrastructure/RaayaGitDeploy.Infrastructure.csproj" />
+    <Project Path="src/RaayaGitDeploy.Presentation/RaayaGitDeploy.Presentation.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj" />
+    <Project Path="tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj" />
+    <Project Path="tests/RaayaGitDeploy.Presentation.Tests/RaayaGitDeploy.Presentation.Tests.csproj" />
+  </Folder>
+</Solution>
