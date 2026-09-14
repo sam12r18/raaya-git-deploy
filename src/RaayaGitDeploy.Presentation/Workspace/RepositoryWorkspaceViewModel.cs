@@ -1,12 +1,14 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RaayaGitDeploy.Core.Git;
+using RaayaGitDeploy.Core.Review;
 
 namespace RaayaGitDeploy.Presentation.Workspace;
 
 public partial class RepositoryWorkspaceViewModel : ObservableObject
 {
     private readonly IGitRepositoryService _repositoryService;
+    private ReviewSession? _reviewSession;
 
     [ObservableProperty]
     private string? repositoryPath;
@@ -16,6 +18,12 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
 
     [ObservableProperty]
     private string? headSha;
+
+    [ObservableProperty]
+    private string? baseRef;
+
+    [ObservableProperty]
+    private string? selectedDiffText;
 
     [ObservableProperty]
     private bool isBusy;
@@ -28,33 +36,90 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         _repositoryService = repositoryService ?? throw new ArgumentNullException(nameof(repositoryService));
     }
 
-    public ObservableCollection<RepositoryChangeItemViewModel> Changes { get; } = new();
+    public ObservableCollection<ChangeItemViewModel> Changes { get; } = new();
 
-    public async Task LoadRepositoryAsync(
+    public Task LoadRepositoryAsync(
+        string path,
+        CancellationToken cancellationToken = default) =>
+        OpenRepositoryAsync(path, cancellationToken);
+
+    public async Task OpenRepositoryAsync(
         string path,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
+        await ExecuteAsync(
+            async () =>
+            {
+                var context = await _repositoryService.GetContextAsync(path, cancellationToken);
+                var changes = await _repositoryService.GetWorkingTreeChangesAsync(
+                    context.RootPath,
+                    cancellationToken);
+
+                RepositoryPath = context.RootPath;
+                BranchName = context.BranchName;
+                HeadSha = context.HeadSha;
+                BaseRef = null;
+                SelectedDiffText = null;
+
+                SetWorkingTreeChanges(changes);
+            },
+            cancellationToken);
+    }
+
+    public async Task CompareSinceAsync(
+        string baseRef,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseRef);
+        var repositoryPath = GetRequiredRepositoryPath();
+        var normalizedBaseRef = baseRef.Trim();
+
+        await ExecuteAsync(
+            async () =>
+            {
+                var changes = await _repositoryService.GetChangesSinceAsync(
+                    repositoryPath,
+                    new GitComparisonRequest(normalizedBaseRef),
+                    cancellationToken);
+
+                BaseRef = normalizedBaseRef;
+                SelectedDiffText = null;
+                SetChanges(changes);
+            },
+            cancellationToken);
+    }
+
+    public async Task LoadDiffAsync(
+        ChangeItemViewModel item,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        var repositoryPath = GetRequiredRepositoryPath();
+
+        await ExecuteAsync(
+            async () =>
+            {
+                SelectedDiffText = await _repositoryService.GetDiffAsync(
+                    repositoryPath,
+                    item.Path,
+                    BaseRef,
+                    cancellationToken);
+            },
+            cancellationToken);
+    }
+
+    private async Task ExecuteAsync(
+        Func<Task> operation,
+        CancellationToken cancellationToken)
+    {
         IsBusy = true;
         ErrorMessage = null;
 
         try
         {
-            var context = await _repositoryService.GetContextAsync(path, cancellationToken);
-            var changes = await _repositoryService.GetWorkingTreeChangesAsync(
-                context.RootPath,
-                cancellationToken);
-
-            RepositoryPath = context.RootPath;
-            BranchName = context.BranchName;
-            HeadSha = context.HeadSha;
-
-            Changes.Clear();
-            foreach (var change in changes)
-            {
-                Changes.Add(new RepositoryChangeItemViewModel(change));
-            }
+            await operation();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -69,4 +134,44 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
             IsBusy = false;
         }
     }
+
+    private void SetWorkingTreeChanges(IReadOnlyList<GitWorkingTreeChange> changes)
+    {
+        var domainChanges = changes
+            .Select(static change => new GitChange(change.Path, change.Kind, change.OriginalPath))
+            .ToArray();
+        var flagsByPath = changes.ToDictionary(
+            static change => change.Path,
+            static change => (change.IsStaged, change.IsUnstaged),
+            StringComparer.Ordinal);
+
+        SetChanges(
+            domainChanges,
+            item => flagsByPath.TryGetValue(item.Path, out var flags)
+                ? flags
+                : default);
+    }
+
+    private void SetChanges(
+        IReadOnlyList<GitChange> changes,
+        Func<ReviewItem, (bool IsStaged, bool IsUnstaged)>? flagsProvider = null)
+    {
+        _reviewSession = ReviewSession.Create(changes);
+        Changes.Clear();
+
+        foreach (var item in _reviewSession.Items)
+        {
+            var flags = flagsProvider?.Invoke(item) ?? default;
+            Changes.Add(new ChangeItemViewModel(
+                _reviewSession,
+                item,
+                flags.IsStaged,
+                flags.IsUnstaged));
+        }
+    }
+
+    private string GetRequiredRepositoryPath() =>
+        !string.IsNullOrWhiteSpace(RepositoryPath)
+            ? RepositoryPath
+            : throw new InvalidOperationException("Open a Git repository before running this operation.");
 }
