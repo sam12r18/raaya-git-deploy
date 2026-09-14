@@ -51,6 +51,36 @@ public sealed class GitRepositoryService : IGitRepositoryService
             headSha);
     }
 
+    public async Task<IReadOnlyList<GitWorkingTreeChange>> GetWorkingTreeChangesAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var root = await RunRequiredAsync(
+            path,
+            new[] { "rev-parse", "--show-toplevel" },
+            cancellationToken);
+
+        var arguments = new[]
+        {
+            "-c",
+            "status.renames=true",
+            "status",
+            "--porcelain=v2",
+            "-z",
+            "--untracked-files=all"
+        };
+
+        var result = await _runner.RunAsync(root, arguments, cancellationToken);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
+        }
+
+        return GitPorcelainV2Parser.Parse(result.StandardOutput);
+    }
+
     private async Task<string> RunRequiredAsync(
         string workingDirectory,
         IReadOnlyList<string> arguments,
