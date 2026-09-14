@@ -37,8 +37,9 @@ jobs:
       - name: Build
         run: dotnet build RaayaGitDeploy.slnx --configuration Release --no-restore
 
-      # Add test-project steps as each test project gains its first real behavior test.
-      # Microsoft Testing Platform returns exit code 8 when a test module contains zero tests.
+      - name: Test Core
+        run: dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj --configuration Release --no-build
+
       - name: Test Infrastructure
         run: dotnet test tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj --configuration Release --no-build
 
