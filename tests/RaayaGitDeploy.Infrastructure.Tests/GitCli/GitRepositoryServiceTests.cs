@@ -181,6 +181,47 @@ public sealed class GitRepositoryServiceTests
         }
     }
 
+    [Fact]
+    public async Task GetDiffAsync_UntrackedTextFileAbovePreviewLimit_ReturnsEmpty()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"rgd-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var runner = new GitProcessRunner();
+            await runner.RunAsync(root, new[] { "init", "-b", "main" }, cancellationToken);
+            await runner.RunAsync(root, new[] { "config", "user.email", "test@example.invalid" }, cancellationToken);
+            await runner.RunAsync(root, new[] { "config", "user.name", "Raaya Test" }, cancellationToken);
+
+            await File.WriteAllTextAsync(Path.Combine(root, "README.md"), "# test\n", cancellationToken);
+            await runner.RunAsync(root, new[] { "add", "README.md" }, cancellationToken);
+            await runner.RunAsync(root, new[] { "commit", "-m", "baseline" }, cancellationToken);
+
+            const string relativePath = "large-notes.txt";
+            await File.WriteAllTextAsync(
+                Path.Combine(root, relativePath),
+                "0123456789abcdef\nsecond line\n",
+                cancellationToken);
+
+            var service = new GitRepositoryService(runner);
+
+            var diff = await service.GetDiffAsync(
+                root,
+                relativePath,
+                null,
+                maxUntrackedPreviewBytes: 16,
+                cancellationToken);
+
+            Assert.Equal(string.Empty, diff);
+        }
+        finally
+        {
+            DeleteDirectory(root);
+        }
+    }
+
     private static void DeleteDirectory(string path)
     {
         if (!Directory.Exists(path))
