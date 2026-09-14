@@ -7,23 +7,27 @@ public sealed class GitRepositoryServiceTests
     [Fact]
     public async Task GetContextAsync_ReturnsRootBranchAndHead()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var root = Path.Combine(Path.GetTempPath(), $"rgd-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
 
         try
         {
             var runner = new GitProcessRunner();
-            await runner.RunAsync(root, new[] { "init", "-b", "main" }, CancellationToken.None);
-            await runner.RunAsync(root, new[] { "config", "user.email", "test@example.invalid" }, CancellationToken.None);
-            await runner.RunAsync(root, new[] { "config", "user.name", "Raaya Test" }, CancellationToken.None);
+            await runner.RunAsync(root, new[] { "init", "-b", "main" }, cancellationToken);
+            await runner.RunAsync(root, new[] { "config", "user.email", "test@example.invalid" }, cancellationToken);
+            await runner.RunAsync(root, new[] { "config", "user.name", "Raaya Test" }, cancellationToken);
 
-            await File.WriteAllTextAsync(Path.Combine(root, "README.md"), "# test");
-            await runner.RunAsync(root, new[] { "add", "README.md" }, CancellationToken.None);
-            await runner.RunAsync(root, new[] { "commit", "-m", "initial" }, CancellationToken.None);
+            await File.WriteAllTextAsync(
+                Path.Combine(root, "README.md"),
+                "# test",
+                cancellationToken);
+            await runner.RunAsync(root, new[] { "add", "README.md" }, cancellationToken);
+            await runner.RunAsync(root, new[] { "commit", "-m", "initial" }, cancellationToken);
 
             var service = new GitRepositoryService(runner);
 
-            var context = await service.GetContextAsync(root, CancellationToken.None);
+            var context = await service.GetContextAsync(root, cancellationToken);
 
             Assert.Equal(
                 Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar),
