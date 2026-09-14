@@ -96,5 +96,22 @@ public sealed class RepositoryWorkspaceViewModelTests
             ChangesRequestedPath = path;
             return Task.FromResult(_changes);
         }
+
+        public Task<IReadOnlyList<GitChange>> GetChangesSinceAsync(
+            string repositoryPath,
+            GitComparisonRequest request,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<string> GetDiffAsync(
+            string repositoryPath,
+            string path,
+            string? baseRef,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
     }
 }
