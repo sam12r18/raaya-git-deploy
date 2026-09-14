@@ -18,6 +18,7 @@ public sealed class RepositoryWorkspaceViewModelTests
         Assert.Equal(@"I:\Projects\sample", viewModel.RepositoryPath);
         Assert.Equal("feature/ai-change", viewModel.BranchName);
         Assert.Equal("0123456789abcdef0123456789abcdef01234567", viewModel.HeadSha);
+        Assert.Equal("01234567", viewModel.AbbreviatedHeadSha);
         Assert.False(viewModel.IsBusy);
         Assert.Null(viewModel.ErrorMessage);
 
