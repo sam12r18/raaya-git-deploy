@@ -9,4 +9,15 @@ public interface IGitRepositoryService
     Task<IReadOnlyList<GitWorkingTreeChange>> GetWorkingTreeChangesAsync(
         string path,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<GitChange>> GetChangesSinceAsync(
+        string repositoryPath,
+        GitComparisonRequest request,
+        CancellationToken cancellationToken);
+
+    Task<string> GetDiffAsync(
+        string repositoryPath,
+        string path,
+        string? baseRef,
+        CancellationToken cancellationToken);
 }
