@@ -1,4 +1,5 @@
 using RaayaGitDeploy.Core.Git;
+using RaayaGitDeploy.Core.Git.Parsing;
 
 namespace RaayaGitDeploy.Infrastructure.GitCli;
 
@@ -79,6 +80,68 @@ public sealed class GitRepositoryService : IGitRepositoryService
         }
 
         return GitPorcelainV2Parser.Parse(result.StandardOutput);
+    }
+
+    public async Task<IReadOnlyList<GitChange>> GetChangesSinceAsync(
+        string repositoryPath,
+        GitComparisonRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var root = await RunRequiredAsync(
+            repositoryPath,
+            new[] { "rev-parse", "--show-toplevel" },
+            cancellationToken);
+
+        var arguments = new[]
+        {
+            "diff",
+            "--name-status",
+            "-M",
+            "-z",
+            $"{request.BaseRef}...HEAD"
+        };
+
+        var result = await _runner.RunAsync(root, arguments, cancellationToken);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
+        }
+
+        return GitNameStatusParser.Parse(result.StandardOutput);
+    }
+
+    public async Task<string> GetDiffAsync(
+        string repositoryPath,
+        string path,
+        string? baseRef,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        if (baseRef is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(baseRef);
+        }
+
+        var root = await RunRequiredAsync(
+            repositoryPath,
+            new[] { "rev-parse", "--show-toplevel" },
+            cancellationToken);
+
+        string[] arguments = baseRef is null
+            ? ["diff", "--no-color", "HEAD", "--", path]
+            : ["diff", "--no-color", $"{baseRef}...HEAD", "--", path];
+
+        var result = await _runner.RunAsync(root, arguments, cancellationToken);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
+        }
+
+        return result.StandardOutput;
     }
 
     private async Task<string> RunRequiredAsync(
