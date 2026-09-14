@@ -1,0 +1,89 @@
+using RaayaGitDeploy.Core.Git;
+
+namespace RaayaGitDeploy.Infrastructure.GitCli;
+
+public sealed class GitRepositoryService : IGitRepositoryService
+{
+    private readonly IGitProcessRunner _runner;
+
+    public GitRepositoryService(IGitProcessRunner runner)
+    {
+        _runner = runner ?? throw new ArgumentNullException(nameof(runner));
+    }
+
+    public async Task<GitRepositoryContext> GetContextAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var root = await RunRequiredAsync(
+            path,
+            new[] { "rev-parse", "--show-toplevel" },
+            cancellationToken);
+
+        var headSha = await RunRequiredAsync(
+            root,
+            new[] { "rev-parse", "HEAD" },
+            cancellationToken);
+
+        var branchResult = await _runner.RunAsync(
+            root,
+            new[] { "branch", "--show-current" },
+            cancellationToken);
+
+        if (branchResult.ExitCode != 0)
+        {
+            throw new InvalidOperationException(BuildGitFailureMessage(
+                new[] { "branch", "--show-current" },
+                branchResult));
+        }
+
+        var branchName = branchResult.StandardOutput.Trim();
+        if (string.IsNullOrWhiteSpace(branchName))
+        {
+            branchName = $"detached@{headSha[..Math.Min(8, headSha.Length)]}";
+        }
+
+        return new GitRepositoryContext(
+            Path.GetFullPath(root),
+            branchName,
+            headSha);
+    }
+
+    private async Task<string> RunRequiredAsync(
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken)
+    {
+        var result = await _runner.RunAsync(
+            workingDirectory,
+            arguments,
+            cancellationToken);
+
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
+        }
+
+        var output = result.StandardOutput.Trim();
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            throw new InvalidOperationException(
+                $"git {string.Join(' ', arguments)} returned no output.");
+        }
+
+        return output;
+    }
+
+    private static string BuildGitFailureMessage(
+        IReadOnlyList<string> arguments,
+        GitCommandResult result)
+    {
+        var error = string.IsNullOrWhiteSpace(result.StandardError)
+            ? result.StandardOutput.Trim()
+            : result.StandardError.Trim();
+
+        return $"git {string.Join(' ', arguments)} failed with exit code {result.ExitCode}: {error}";
+    }
+}
