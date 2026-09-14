@@ -1,3 +1,4 @@
+using System.Text;
 using RaayaGitDeploy.Core.Git;
 using RaayaGitDeploy.Core.Git.Parsing;
 
@@ -5,6 +6,10 @@ namespace RaayaGitDeploy.Infrastructure.GitCli;
 
 public sealed class GitRepositoryService : IGitRepositoryService
 {
+    private static readonly UTF8Encoding StrictUtf8 = new(
+        encoderShouldEmitUTF8Identifier: false,
+        throwOnInvalidBytes: true);
+
     private readonly IGitProcessRunner _runner;
 
     public GitRepositoryService(IGitProcessRunner runner)
@@ -162,7 +167,22 @@ public sealed class GitRepositoryService : IGitRepositoryService
             return result.StandardOutput;
         }
 
-        var text = await File.ReadAllTextAsync(fullPath, cancellationToken);
+        var bytes = await File.ReadAllBytesAsync(fullPath, cancellationToken);
+        if (bytes.Contains((byte)0))
+        {
+            return string.Empty;
+        }
+
+        string text;
+        try
+        {
+            text = StrictUtf8.GetString(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            return string.Empty;
+        }
+
         return BuildAllAddedPreview(path, text);
     }
 
@@ -174,7 +194,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
             ? lines.Length - 1
             : lines.Length;
 
-        var preview = new System.Text.StringBuilder();
+        var preview = new StringBuilder();
         preview.AppendLine("--- /dev/null");
         preview.AppendLine($"+++ b/{path}");
         preview.AppendLine($"@@ -0,0 +1,{lineCount} @@");
