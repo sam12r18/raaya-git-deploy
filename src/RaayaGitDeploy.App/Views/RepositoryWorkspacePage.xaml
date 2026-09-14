@@ -163,11 +163,11 @@
                         AcceptsReturn="True"
                         FontFamily="Cascadia Mono, Consolas"
                         FontSize="12"
-                        HorizontalScrollBarVisibility="Auto"
                         IsReadOnly="True"
+                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                        ScrollViewer.VerticalScrollBarVisibility="Auto"
                         Text="{x:Bind ViewModel.SelectedDiffText, Mode=OneWay}"
-                        TextWrapping="NoWrap"
-                        VerticalScrollBarVisibility="Auto" />
+                        TextWrapping="NoWrap" />
                 </Grid>
             </Border>
         </Grid>
