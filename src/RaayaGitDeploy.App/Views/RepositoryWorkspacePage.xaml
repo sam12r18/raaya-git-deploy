@@ -31,7 +31,10 @@
                     Text="{x:Bind ViewModel.RepositoryPath, Mode=OneWay}" />
                 <StackPanel HorizontalAlignment="Center" Orientation="Horizontal" Spacing="12">
                     <TextBlock Opacity="0.7" Text="{x:Bind ViewModel.BranchName, Mode=OneWay}" />
-                    <TextBlock Opacity="0.5" Text="{x:Bind ViewModel.HeadSha, Mode=OneWay}" />
+                    <TextBlock
+                        Opacity="0.5"
+                        Text="{x:Bind ViewModel.AbbreviatedHeadSha, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.HeadSha, Mode=OneWay}" />
                 </StackPanel>
             </StackPanel>
 
