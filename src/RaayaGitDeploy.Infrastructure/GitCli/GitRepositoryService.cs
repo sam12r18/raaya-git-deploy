@@ -118,10 +118,23 @@ public sealed class GitRepositoryService : IGitRepositoryService
         return GitNameStatusParser.Parse(result.StandardOutput);
     }
 
+    public Task<string> GetDiffAsync(
+        string repositoryPath,
+        string path,
+        string? baseRef,
+        CancellationToken cancellationToken) =>
+        GetDiffAsync(
+            repositoryPath,
+            path,
+            baseRef,
+            long.MaxValue,
+            cancellationToken);
+
     public async Task<string> GetDiffAsync(
         string repositoryPath,
         string path,
         string? baseRef,
+        long maxUntrackedPreviewBytes,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
@@ -129,6 +142,11 @@ public sealed class GitRepositoryService : IGitRepositoryService
         if (baseRef is not null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(baseRef);
+        }
+
+        if (maxUntrackedPreviewBytes < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxUntrackedPreviewBytes));
         }
 
         var root = await RunRequiredAsync(
