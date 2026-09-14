@@ -19,6 +19,7 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
     private string? branchName;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AbbreviatedHeadSha))]
     private string? headSha;
 
     [ObservableProperty]
@@ -39,6 +40,11 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
     }
 
     public ObservableCollection<ChangeItemViewModel> Changes { get; } = new();
+
+    public string? AbbreviatedHeadSha =>
+        string.IsNullOrEmpty(HeadSha)
+            ? null
+            : HeadSha[..Math.Min(8, HeadSha.Length)];
 
     public Task LoadRepositoryAsync(
         string path,
