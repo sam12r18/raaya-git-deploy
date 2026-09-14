@@ -75,7 +75,7 @@ public sealed partial class RepositoryWorkspacePage : Page
         await ViewModel.LoadDiffAsync(item, CancellationToken.None);
     }
 
-    private static void ReviewStateComboBox_Loaded(object sender, RoutedEventArgs e)
+    private void ReviewStateComboBox_Loaded(object sender, RoutedEventArgs e)
     {
         if (sender is ComboBox comboBox && comboBox.DataContext is ChangeItemViewModel item)
         {
@@ -83,7 +83,7 @@ public sealed partial class RepositoryWorkspacePage : Page
         }
     }
 
-    private static void ReviewStateComboBox_SelectionChanged(
+    private void ReviewStateComboBox_SelectionChanged(
         object sender,
         SelectionChangedEventArgs e)
     {
