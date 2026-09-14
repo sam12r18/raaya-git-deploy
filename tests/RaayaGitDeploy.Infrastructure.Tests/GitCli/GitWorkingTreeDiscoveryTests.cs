@@ -21,16 +21,16 @@ public sealed class GitWorkingTreeDiscoveryTests
 
             await File.WriteAllTextAsync(Path.Combine(root, "modified.txt"), "before", cancellationToken);
             await File.WriteAllTextAsync(Path.Combine(root, "deleted.txt"), "delete me", cancellationToken);
-            await File.WriteAllTextAsync(Path.Combine(root, "rename-old.txt"), "rename me", cancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(root, "rename old.txt"), "rename me", cancellationToken);
             await runner.RunAsync(root, new[] { "add", "." }, cancellationToken);
             await runner.RunAsync(root, new[] { "commit", "-m", "baseline" }, cancellationToken);
 
             await File.WriteAllTextAsync(Path.Combine(root, "modified.txt"), "after", cancellationToken);
             File.Delete(Path.Combine(root, "deleted.txt"));
-            await runner.RunAsync(root, new[] { "mv", "rename-old.txt", "rename-new.txt" }, cancellationToken);
+            await runner.RunAsync(root, new[] { "mv", "rename old.txt", "rename new.txt" }, cancellationToken);
             await File.WriteAllTextAsync(Path.Combine(root, "added.txt"), "added", cancellationToken);
             await runner.RunAsync(root, new[] { "add", "added.txt" }, cancellationToken);
-            await File.WriteAllTextAsync(Path.Combine(root, "untracked.txt"), "untracked", cancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(root, "untracked file.txt"), "untracked", cancellationToken);
 
             var service = new GitRepositoryService(runner);
 
@@ -41,13 +41,13 @@ public sealed class GitWorkingTreeDiscoveryTests
             Assert.Contains(changes, change =>
                 change.Path == "deleted.txt" && change.Kind == GitChangeKind.Deleted);
             Assert.Contains(changes, change =>
-                change.Path == "rename-new.txt" &&
-                change.OriginalPath == "rename-old.txt" &&
+                change.Path == "rename new.txt" &&
+                change.OriginalPath == "rename old.txt" &&
                 change.Kind == GitChangeKind.Renamed);
             Assert.Contains(changes, change =>
                 change.Path == "added.txt" && change.Kind == GitChangeKind.Added);
             Assert.Contains(changes, change =>
-                change.Path == "untracked.txt" && change.Kind == GitChangeKind.Untracked);
+                change.Path == "untracked file.txt" && change.Kind == GitChangeKind.Untracked);
         }
         finally
         {
