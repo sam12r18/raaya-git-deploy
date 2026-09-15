@@ -4,6 +4,7 @@ public sealed class RepositoryOpenCoordinator
 {
     private readonly IRepositoryFolderPicker _folderPicker;
     private readonly RepositoryWorkspaceViewModel _viewModel;
+    private int _openAttemptInProgress;
 
     public RepositoryOpenCoordinator(
         IRepositoryFolderPicker folderPicker,
@@ -15,33 +16,40 @@ public sealed class RepositoryOpenCoordinator
 
     public async Task OpenRepositoryAsync(CancellationToken cancellationToken = default)
     {
-        if (_viewModel.IsBusy)
+        if (_viewModel.IsBusy || Interlocked.CompareExchange(ref _openAttemptInProgress, 1, 0) != 0)
         {
             return;
         }
 
-        _viewModel.ClearError();
-
-        string? path;
         try
         {
-            path = await _folderPicker.PickFolderAsync(cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            _viewModel.ReportError(exception);
-            return;
-        }
+            _viewModel.ClearError();
 
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return;
-        }
+            string? path;
+            try
+            {
+                path = await _folderPicker.PickFolderAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _viewModel.ReportError(exception);
+                return;
+            }
 
-        await _viewModel.OpenRepositoryAsync(path, cancellationToken);
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            await _viewModel.OpenRepositoryAsync(path, cancellationToken);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _openAttemptInProgress, 0);
+        }
     }
 }
