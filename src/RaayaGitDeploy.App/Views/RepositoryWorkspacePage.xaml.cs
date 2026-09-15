@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.Windows.Storage.Pickers;
 using RaayaGitDeploy.Core.Review;
 using RaayaGitDeploy.Presentation.Workspace;
 
@@ -9,14 +8,14 @@ namespace RaayaGitDeploy.App.Views;
 
 public sealed partial class RepositoryWorkspacePage : Page
 {
-    private readonly Window _window;
+    private readonly RepositoryOpenCoordinator _openCoordinator;
 
     public RepositoryWorkspacePage(
-        Window window,
-        RepositoryWorkspaceViewModel viewModel)
+        RepositoryWorkspaceViewModel viewModel,
+        RepositoryOpenCoordinator openCoordinator)
     {
-        _window = window ?? throw new ArgumentNullException(nameof(window));
         ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _openCoordinator = openCoordinator ?? throw new ArgumentNullException(nameof(openCoordinator));
 
         InitializeComponent();
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -26,25 +25,7 @@ public sealed partial class RepositoryWorkspacePage : Page
 
     private async void OpenRepository_Click(object sender, RoutedEventArgs e)
     {
-        if (ViewModel.IsBusy)
-        {
-            return;
-        }
-
-        var picker = new FolderPicker(_window.AppWindow.Id)
-        {
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            CommitButtonText = "Open Repository",
-            ViewMode = PickerViewMode.List
-        };
-
-        var folder = await picker.PickSingleFolderAsync();
-        if (folder is null)
-        {
-            return;
-        }
-
-        await ViewModel.OpenRepositoryAsync(folder.Path, CancellationToken.None);
+        await _openCoordinator.OpenRepositoryAsync(CancellationToken.None);
     }
 
     private async void WorkingTree_Click(object sender, RoutedEventArgs e)
