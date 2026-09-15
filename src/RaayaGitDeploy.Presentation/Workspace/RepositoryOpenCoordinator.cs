@@ -20,7 +20,21 @@ public sealed class RepositoryOpenCoordinator
             return;
         }
 
-        var path = await _folderPicker.PickFolderAsync(cancellationToken);
+        string? path;
+        try
+        {
+            path = await _folderPicker.PickFolderAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _viewModel.ReportError(exception);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(path))
         {
             return;
