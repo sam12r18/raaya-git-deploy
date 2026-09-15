@@ -20,6 +20,8 @@ public sealed class RepositoryOpenCoordinator
             return;
         }
 
+        _viewModel.ClearError();
+
         string? path;
         try
         {
