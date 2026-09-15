@@ -58,6 +58,9 @@ public sealed class RepositoryOpenCoordinatorTests
         public Task<IReadOnlyList<GitChange>> GetChangesSinceAsync(string repositoryPath, GitComparisonRequest request, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<GitChange>>([]);
 
+        public Task<string> GetDiffAsync(string repositoryPath, string path, string? baseRef, CancellationToken cancellationToken) =>
+            Task.FromResult(string.Empty);
+
         public Task<string> GetDiffAsync(string repositoryPath, string path, string? baseRef, long maxTextBytes, CancellationToken cancellationToken) =>
             Task.FromResult(string.Empty);
     }
