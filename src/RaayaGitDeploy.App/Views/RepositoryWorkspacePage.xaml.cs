@@ -1,10 +1,9 @@
 using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.Windows.Storage.Pickers;
 using RaayaGitDeploy.Core.Review;
 using RaayaGitDeploy.Presentation.Workspace;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
 
 namespace RaayaGitDeploy.App.Views;
 
@@ -32,9 +31,12 @@ public sealed partial class RepositoryWorkspacePage : Page
             return;
         }
 
-        var picker = new FolderPicker();
-        picker.FileTypeFilter.Add("*");
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(_window));
+        var picker = new FolderPicker(_window.AppWindow.Id)
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            CommitButtonText = "Open Repository",
+            ViewMode = PickerViewMode.List
+        };
 
         var folder = await picker.PickSingleFolderAsync();
         if (folder is null)
