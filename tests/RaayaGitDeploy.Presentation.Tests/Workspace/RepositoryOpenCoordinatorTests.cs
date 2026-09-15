@@ -36,10 +36,32 @@ public sealed class RepositoryOpenCoordinatorTests
         Assert.Null(viewModel.RepositoryPath);
     }
 
+    [Fact]
+    public async Task OpenRepositoryAsync_PickerFails_ReportsDiagnosticWithoutCallingGit()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var git = new FakeGitRepositoryService();
+        var viewModel = new RepositoryWorkspaceViewModel(git);
+        var coordinator = new RepositoryOpenCoordinator(
+            new ThrowingRepositoryFolderPicker(new InvalidOperationException("Folder picker failed to initialize.")),
+            viewModel);
+
+        await coordinator.OpenRepositoryAsync(cancellationToken);
+
+        Assert.Null(git.ContextRequestedPath);
+        Assert.Equal("Folder picker failed to initialize.", viewModel.ErrorMessage);
+    }
+
     private sealed class FakeRepositoryFolderPicker(string? path) : IRepositoryFolderPicker
     {
         public Task<string?> PickFolderAsync(CancellationToken cancellationToken) =>
             Task.FromResult(path);
+    }
+
+    private sealed class ThrowingRepositoryFolderPicker(Exception exception) : IRepositoryFolderPicker
+    {
+        public Task<string?> PickFolderAsync(CancellationToken cancellationToken) =>
+            Task.FromException<string?>(exception);
     }
 
     private sealed class FakeGitRepositoryService : IGitRepositoryService
