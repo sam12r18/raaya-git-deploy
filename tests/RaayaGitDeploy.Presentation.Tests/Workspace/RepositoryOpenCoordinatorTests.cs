@@ -69,6 +69,26 @@ public sealed class RepositoryOpenCoordinatorTests
         Assert.Equal("Folder picker failed to initialize.", viewModel.ErrorMessage);
     }
 
+    [Fact]
+    public async Task OpenRepositoryAsync_WhilePickerIsOpen_DoesNotOpenSecondPicker()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var git = new FakeGitRepositoryService();
+        var viewModel = new RepositoryWorkspaceViewModel(git);
+        var picker = new BlockingRepositoryFolderPicker();
+        var coordinator = new RepositoryOpenCoordinator(picker, viewModel);
+
+        var firstAttempt = coordinator.OpenRepositoryAsync(cancellationToken);
+        await picker.WaitUntilOpenedAsync(cancellationToken);
+
+        var secondAttempt = coordinator.OpenRepositoryAsync(cancellationToken);
+
+        Assert.Equal(1, picker.CallCount);
+
+        picker.CancelSelection();
+        await Task.WhenAll(firstAttempt, secondAttempt);
+    }
+
     private sealed class FakeRepositoryFolderPicker(string? path) : IRepositoryFolderPicker
     {
         public Task<string?> PickFolderAsync(CancellationToken cancellationToken) =>
@@ -79,6 +99,26 @@ public sealed class RepositoryOpenCoordinatorTests
     {
         public Task<string?> PickFolderAsync(CancellationToken cancellationToken) =>
             Task.FromException<string?>(exception);
+    }
+
+    private sealed class BlockingRepositoryFolderPicker : IRepositoryFolderPicker
+    {
+        private readonly TaskCompletionSource _opened = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<string?> _selection = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int CallCount { get; private set; }
+
+        public Task<string?> PickFolderAsync(CancellationToken cancellationToken)
+        {
+            CallCount++;
+            _opened.TrySetResult();
+            return _selection.Task.WaitAsync(cancellationToken);
+        }
+
+        public Task WaitUntilOpenedAsync(CancellationToken cancellationToken) =>
+            _opened.Task.WaitAsync(cancellationToken);
+
+        public void CancelSelection() => _selection.TrySetResult(null);
     }
 
     private sealed class FakeGitRepositoryService : IGitRepositoryService
