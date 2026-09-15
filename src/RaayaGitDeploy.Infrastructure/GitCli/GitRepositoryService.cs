@@ -80,21 +80,22 @@ public sealed class GitRepositoryService : IGitRepositoryService
         if (maxUntrackedPreviewBytes < 0) throw new ArgumentOutOfRangeException(nameof(maxUntrackedPreviewBytes));
 
         var root = await RunRequiredAsync(repositoryPath, new[] { "rev-parse", "--show-toplevel" }, cancellationToken);
-        ValidateRepositoryRelativePath(root, path);
+        var gitPath = NormalizeGitPath(path);
+        ValidateRepositoryRelativePath(root, gitPath);
 
         string[] arguments = baseRef is null
-            ? ["diff", "--no-color", "HEAD", "--", path]
-            : ["diff", "--no-color", $"{baseRef}...HEAD", "--", path];
+            ? ["diff", "--no-color", "HEAD", "--", gitPath]
+            : ["diff", "--no-color", $"{baseRef}...HEAD", "--", gitPath];
 
         var result = await _runner.RunAsync(root, arguments, cancellationToken);
         if (result.ExitCode != 0) throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
         if (baseRef is not null || !string.IsNullOrEmpty(result.StandardOutput)) return result.StandardOutput;
 
         var workingTreeChanges = await GetWorkingTreeChangesAsync(root, cancellationToken);
-        var isUntracked = workingTreeChanges.Any(change => change.Kind == GitChangeKind.Untracked && string.Equals(change.Path, path, StringComparison.Ordinal));
+        var isUntracked = workingTreeChanges.Any(change => change.Kind == GitChangeKind.Untracked && string.Equals(change.Path, gitPath, StringComparison.Ordinal));
         if (!isUntracked) return result.StandardOutput;
 
-        var fullPath = Path.GetFullPath(Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar)));
+        var fullPath = Path.GetFullPath(Path.Combine(root, gitPath.Replace('/', Path.DirectorySeparatorChar)));
         if (!File.Exists(fullPath)) return result.StandardOutput;
         var fileInfo = new FileInfo(fullPath);
         if (fileInfo.Length > maxUntrackedPreviewBytes) return string.Empty;
@@ -105,8 +106,11 @@ public sealed class GitRepositoryService : IGitRepositoryService
         string text;
         try { text = StrictUtf8.GetString(bytes); }
         catch (DecoderFallbackException) { return string.Empty; }
-        return BuildAllAddedPreview(path, text);
+        return BuildAllAddedPreview(gitPath, text);
     }
+
+    private static string NormalizeGitPath(string path) =>
+        path.Replace('\\', '/');
 
     private static void ValidateRepositoryRelativePath(string repositoryRoot, string path)
     {
