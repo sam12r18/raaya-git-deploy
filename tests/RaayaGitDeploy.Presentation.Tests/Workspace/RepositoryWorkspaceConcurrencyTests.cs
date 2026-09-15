@@ -10,12 +10,13 @@ public sealed class RepositoryWorkspaceConcurrencyTests
     {
         var service = new BlockingRepositoryService();
         var viewModel = new RepositoryWorkspaceViewModel(service);
+        var cancellationToken = TestContext.Current.CancellationToken;
 
-        var firstOpen = viewModel.OpenRepositoryAsync(@"I:\Projects\first", CancellationToken.None);
-        await service.FirstContextRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var firstOpen = viewModel.OpenRepositoryAsync(@"I:\Projects\first", cancellationToken);
+        await service.FirstContextRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
 
-        var secondOpen = viewModel.OpenRepositoryAsync(@"I:\Projects\second", CancellationToken.None);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        var secondOpen = viewModel.OpenRepositoryAsync(@"I:\Projects\second", cancellationToken);
+        await Task.Delay(100, cancellationToken);
 
         Assert.Equal(1, service.ContextRequestCount);
 
