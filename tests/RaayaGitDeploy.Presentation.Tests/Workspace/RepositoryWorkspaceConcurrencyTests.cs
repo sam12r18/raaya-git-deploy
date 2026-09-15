@@ -14,12 +14,13 @@ public sealed class RepositoryWorkspaceConcurrencyTests
         var firstOpen = viewModel.OpenRepositoryAsync(@"I:\Projects\first", CancellationToken.None);
         await service.FirstContextRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        await viewModel.OpenRepositoryAsync(@"I:\Projects\second", CancellationToken.None);
+        var secondOpen = viewModel.OpenRepositoryAsync(@"I:\Projects\second", CancellationToken.None);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, service.ContextRequestCount);
 
-        service.ReleaseFirstContextRequest.TrySetResult();
-        await firstOpen;
+        service.ReleaseContextRequests.TrySetResult();
+        await Task.WhenAll(firstOpen, secondOpen);
     }
 
     private sealed class BlockingRepositoryService : IGitRepositoryService
@@ -27,7 +28,7 @@ public sealed class RepositoryWorkspaceConcurrencyTests
         public TaskCompletionSource FirstContextRequestStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public TaskCompletionSource ReleaseFirstContextRequest { get; } =
+        public TaskCompletionSource ReleaseContextRequests { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public int ContextRequestCount { get; private set; }
@@ -36,7 +37,7 @@ public sealed class RepositoryWorkspaceConcurrencyTests
         {
             ContextRequestCount++;
             FirstContextRequestStarted.TrySetResult();
-            await ReleaseFirstContextRequest.Task.WaitAsync(cancellationToken);
+            await ReleaseContextRequests.Task.WaitAsync(cancellationToken);
             return new GitRepositoryContext(@"I:\Projects\first", "main", new string('a', 40));
         }
 
