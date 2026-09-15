@@ -46,6 +46,12 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
             ? null
             : HeadSha[..Math.Min(8, HeadSha.Length)];
 
+    public void ReportError(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        ErrorMessage = exception.Message;
+    }
+
     public Task LoadRepositoryAsync(
         string path,
         CancellationToken cancellationToken = default) =>
