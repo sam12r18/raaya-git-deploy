@@ -46,6 +46,8 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
             ? null
             : HeadSha[..Math.Min(8, HeadSha.Length)];
 
+    public void ClearError() => ErrorMessage = null;
+
     public void ReportError(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
