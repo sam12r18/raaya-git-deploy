@@ -123,6 +123,11 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         Func<Task> operation,
         CancellationToken cancellationToken)
     {
+        if (IsBusy)
+        {
+            return;
+        }
+
         IsBusy = true;
         ErrorMessage = null;
 
