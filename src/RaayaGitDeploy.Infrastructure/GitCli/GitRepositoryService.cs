@@ -6,6 +6,8 @@ namespace RaayaGitDeploy.Infrastructure.GitCli;
 
 public sealed class GitRepositoryService : IGitRepositoryService
 {
+    private const long DefaultMaxUntrackedPreviewBytes = 1024 * 1024;
+
     private static readonly UTF8Encoding StrictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: true);
@@ -63,7 +65,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
     }
 
     public Task<string> GetDiffAsync(string repositoryPath, string path, string? baseRef, CancellationToken cancellationToken) =>
-        GetDiffAsync(repositoryPath, path, baseRef, long.MaxValue, cancellationToken);
+        GetDiffAsync(repositoryPath, path, baseRef, DefaultMaxUntrackedPreviewBytes, cancellationToken);
 
     public async Task<string> GetDiffAsync(
         string repositoryPath,
