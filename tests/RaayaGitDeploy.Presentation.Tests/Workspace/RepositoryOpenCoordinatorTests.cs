@@ -37,6 +37,23 @@ public sealed class RepositoryOpenCoordinatorTests
     }
 
     [Fact]
+    public async Task OpenRepositoryAsync_NewPickerAttempt_ClearsStaleDiagnostic()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var git = new FakeGitRepositoryService();
+        var viewModel = new RepositoryWorkspaceViewModel(git);
+        viewModel.ReportError(new InvalidOperationException("Previous picker failure."));
+        var coordinator = new RepositoryOpenCoordinator(
+            new FakeRepositoryFolderPicker(null),
+            viewModel);
+
+        await coordinator.OpenRepositoryAsync(cancellationToken);
+
+        Assert.Null(viewModel.ErrorMessage);
+        Assert.Null(git.ContextRequestedPath);
+    }
+
+    [Fact]
     public async Task OpenRepositoryAsync_PickerFails_ReportsDiagnosticWithoutCallingGit()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
