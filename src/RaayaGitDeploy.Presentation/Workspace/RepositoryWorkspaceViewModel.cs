@@ -95,13 +95,16 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         await ExecuteAsync(
             async () =>
             {
+                BaseRef = null;
+                SelectedDiffText = null;
+                ClearChanges();
+
                 var changes = await _repositoryService.GetChangesSinceAsync(
                     repositoryPath,
                     new GitComparisonRequest(normalizedBaseRef),
                     cancellationToken);
 
                 BaseRef = normalizedBaseRef;
-                SelectedDiffText = null;
                 SetChanges(changes);
             },
             cancellationToken);
@@ -191,6 +194,12 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
                 flags.IsStaged,
                 flags.IsUnstaged));
         }
+    }
+
+    private void ClearChanges()
+    {
+        _reviewSession = null;
+        Changes.Clear();
     }
 
     private string GetRequiredRepositoryPath() =>
