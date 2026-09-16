@@ -5,22 +5,28 @@ This file records verification evidence for `docs/superpowers/plans/2026-09-14-f
 ## Current checkpoint
 
 - Branch: `feat/foundation-git-review`
-- Verified code checkpoint before this status commit: `3dc8f7a021e264fa1f65dfdca24e3715ef26a63f`
-- Latest completed CI at that checkpoint: run #89 — **success**
+- Current HEAD: `a68956371a467b0d421839eb5f0c0c6ff546f099` (`fix: clear stale repository state before reload`)
+- Previous documented checkpoint: `3dc8f7a021e264fa1f65dfdca24e3715ef26a63f`
+- CI status for current HEAD: **not verified** in this execution; GitHub returned no workflow run or combined status for `a689563`.
 - Scope remains Foundation & Git Review only. Terminal, deployment, remote credentials, and SFTP are intentionally out of scope.
 
 ## Automated verification
 
-CI run #89 completed successfully for commit `3dc8f7a` after the repository-picker single-flight fix. The workflow includes restore/build and the Core, Infrastructure, and Presentation test suites configured by `.github/workflows/ci.yml`.
+The previous documented checkpoint `3dc8f7a` had CI run #89 marked **success** for the repository-picker single-flight fix. Subsequent commits added regression coverage and fixes for stale diff, comparison, and repository state, but this execution did not find a completed CI result for the current HEAD `a689563`; those changes must therefore remain **unverified** until a real workflow result is available.
 
-The following behavior therefore has automated regression coverage at the verified checkpoint:
+Known regression coverage present in the branch includes:
 
 - repository folder selection delegates a selected path to the workspace;
 - cancelling repository selection does not invoke Git;
 - picker failures are surfaced through workspace diagnostics;
 - stale picker diagnostics are cleared before a retry;
 - concurrent Open Repository attempts are single-flight and do not open duplicate pickers;
-- existing Core/Infrastructure/Presentation tests continue to pass under CI.
+- stale diff preview is cleared before a reload;
+- stale comparison state is cleared before a reload;
+- stale repository state is cleared before a reload;
+- existing Core/Infrastructure/Presentation test suites are configured in `.github/workflows/ci.yml`.
+
+No item above is marked as passing for the current HEAD without completed CI evidence.
 
 ## Not manually verified
 
@@ -38,7 +44,8 @@ These correspond to the manual acceptance portion of Task 8. CI success is not a
 
 ## Next execution
 
-1. Check CI for this documentation checkpoint before claiming it is green.
-2. Preserve the picker diagnostics and single-flight behavior while waiting for real Windows acceptance evidence.
-3. If desktop acceptance exposes a failure, reproduce it with the smallest automated regression possible before changing production code.
-4. If desktop acceptance passes, close Task 8 acceptance and only then move to the separate follow-on plan.
+1. Re-check GitHub Actions for `a689563` and record the exact completed run if one becomes available.
+2. If the current commit has no workflow execution, do not claim the branch is green; investigate the workflow trigger/configuration independently.
+3. Preserve the picker diagnostics and single-flight behavior while waiting for real Windows acceptance evidence.
+4. If desktop acceptance exposes a failure, reproduce it with the smallest automated regression possible before changing production code.
+5. If desktop acceptance passes, close Task 8 acceptance and only then move to the separate follow-on plan.
