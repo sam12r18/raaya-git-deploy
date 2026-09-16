@@ -65,6 +65,29 @@ public sealed class RepositoryWorkspaceViewModelTests
     }
 
     [Fact]
+    public async Task CompareSinceAsync_FailureClearsStaleComparisonResults()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var service = CreateService();
+        var viewModel = new RepositoryWorkspaceViewModel(service);
+        await viewModel.OpenRepositoryAsync(@"I:\Projects\sample", cancellationToken);
+
+        service.ComparedChanges = [new GitChange("src/Compared.cs", GitChangeKind.Modified)];
+        await viewModel.CompareSinceAsync("HEAD~1", cancellationToken);
+        Assert.Equal("HEAD~1", viewModel.BaseRef);
+        Assert.Equal("src/Compared.cs", Assert.Single(viewModel.Changes).Path);
+
+        service.CompareException = new InvalidOperationException("comparison failed");
+        await viewModel.CompareSinceAsync("missing-ref", cancellationToken);
+
+        Assert.Null(viewModel.BaseRef);
+        Assert.Empty(viewModel.Changes);
+        Assert.Null(viewModel.SelectedDiffText);
+        Assert.Equal("comparison failed", viewModel.ErrorMessage);
+        Assert.False(viewModel.IsBusy);
+    }
+
+    [Fact]
     public async Task LoadDiffAsync_StoresDiffTextUsingCurrentComparisonMode()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -133,69 +156,44 @@ public sealed class RepositoryWorkspaceViewModelTests
     private sealed class StubGitRepositoryService : IGitRepositoryService
     {
         public required GitRepositoryContext Context { get; init; }
-
         public IReadOnlyList<GitWorkingTreeChange> WorkingTreeChanges { get; init; } = [];
-
         public IReadOnlyList<GitChange> ComparedChanges { get; set; } = [];
-
         public string DiffText { get; set; } = string.Empty;
-
         public Exception? ContextException { get; set; }
-
+        public Exception? CompareException { get; set; }
         public string? ContextRequestedPath { get; private set; }
-
         public string? WorkingTreeRequestedPath { get; private set; }
-
         public string? CompareRequestedPath { get; private set; }
-
         public GitComparisonRequest? ComparisonRequest { get; private set; }
-
         public string? DiffRequestedPath { get; private set; }
-
         public string? DiffRequestedBaseRef { get; private set; }
-
         public long? DiffRequestedMaxPreviewBytes { get; private set; }
 
-        public Task<GitRepositoryContext> GetContextAsync(
-            string path,
-            CancellationToken cancellationToken)
+        public Task<GitRepositoryContext> GetContextAsync(string path, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ContextRequestedPath = path;
-
-            if (ContextException is not null)
-            {
-                throw ContextException;
-            }
-
+            if (ContextException is not null) throw ContextException;
             return Task.FromResult(Context);
         }
 
-        public Task<IReadOnlyList<GitWorkingTreeChange>> GetWorkingTreeChangesAsync(
-            string path,
-            CancellationToken cancellationToken)
+        public Task<IReadOnlyList<GitWorkingTreeChange>> GetWorkingTreeChangesAsync(string path, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             WorkingTreeRequestedPath = path;
             return Task.FromResult(WorkingTreeChanges);
         }
 
-        public Task<IReadOnlyList<GitChange>> GetChangesSinceAsync(
-            string repositoryPath,
-            GitComparisonRequest request,
-            CancellationToken cancellationToken)
+        public Task<IReadOnlyList<GitChange>> GetChangesSinceAsync(string repositoryPath, GitComparisonRequest request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             CompareRequestedPath = repositoryPath;
             ComparisonRequest = request;
+            if (CompareException is not null) throw CompareException;
             return Task.FromResult(ComparedChanges);
         }
 
-        public Task<string> GetDiffAsync(
-            string repositoryPath,
-            string path,
-            string? baseRef,
-            CancellationToken cancellationToken)
+        public Task<string> GetDiffAsync(string repositoryPath, string path, string? baseRef, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             DiffRequestedPath = path;
@@ -203,12 +201,7 @@ public sealed class RepositoryWorkspaceViewModelTests
             return Task.FromResult(DiffText);
         }
 
-        public Task<string> GetDiffAsync(
-            string repositoryPath,
-            string path,
-            string? baseRef,
-            long maxUntrackedPreviewBytes,
-            CancellationToken cancellationToken)
+        public Task<string> GetDiffAsync(string repositoryPath, string path, string? baseRef, long maxUntrackedPreviewBytes, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             DiffRequestedPath = path;
