@@ -58,7 +58,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
         ArgumentNullException.ThrowIfNull(request);
         var root = await RunRequiredAsync(repositoryPath, new[] { "rev-parse", "--show-toplevel" }, cancellationToken);
-        var arguments = new[] { "diff", "--name-status", "-M", "-z", $"{request.BaseRef}...HEAD" };
+        var arguments = new[] { "diff", "--name-status", "-M", "-z", "--", $"{request.BaseRef}...HEAD" };
         var result = await _runner.RunAsync(root, arguments, cancellationToken);
         if (result.ExitCode != 0) throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
         return GitNameStatusParser.Parse(result.StandardOutput);
