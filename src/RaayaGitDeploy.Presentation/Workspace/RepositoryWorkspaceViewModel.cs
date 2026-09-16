@@ -68,6 +68,8 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         await ExecuteAsync(
             async () =>
             {
+                ClearRepositoryState();
+
                 var context = await _repositoryService.GetContextAsync(path, cancellationToken);
                 var changes = await _repositoryService.GetWorkingTreeChangesAsync(
                     context.RootPath,
@@ -76,8 +78,6 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
                 RepositoryPath = context.RootPath;
                 BranchName = context.BranchName;
                 HeadSha = context.HeadSha;
-                BaseRef = null;
-                SelectedDiffText = null;
 
                 SetWorkingTreeChanges(changes);
             },
@@ -159,6 +159,16 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    private void ClearRepositoryState()
+    {
+        RepositoryPath = null;
+        BranchName = null;
+        HeadSha = null;
+        BaseRef = null;
+        SelectedDiffText = null;
+        ClearChanges();
     }
 
     private void SetWorkingTreeChanges(IReadOnlyList<GitWorkingTreeChange> changes)
