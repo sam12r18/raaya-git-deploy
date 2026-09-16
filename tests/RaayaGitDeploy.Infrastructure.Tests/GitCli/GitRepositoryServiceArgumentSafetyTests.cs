@@ -6,7 +6,7 @@ namespace RaayaGitDeploy.Infrastructure.Tests.GitCli;
 public sealed class GitRepositoryServiceArgumentSafetyTests
 {
     [Fact]
-    public async Task GetChangesSinceAsync_SeparatesOptionsFromUserControlledBaseRef()
+    public async Task GetChangesSinceAsync_ResolvesUserControlledBaseRefBeforeDiff()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var runner = new RecordingRunner();
@@ -17,12 +17,16 @@ public sealed class GitRepositoryServiceArgumentSafetyTests
             new GitComparisonRequest("--output=unexpected"),
             cancellationToken);
 
-        var diffArguments = Assert.Single(runner.Commands, command => command.Count > 0 && command[0] == "diff");
-        var separatorIndex = diffArguments.IndexOf("--");
-        var comparisonIndex = diffArguments.IndexOf("--output=unexpected...HEAD");
+        Assert.Contains(
+            runner.Commands,
+            command => command.SequenceEqual(new[]
+            {
+                "rev-parse", "--verify", "--end-of-options", "--output=unexpected^{commit}"
+            }));
 
-        Assert.True(separatorIndex >= 0, "git diff must include an option terminator before the user-controlled comparison ref.");
-        Assert.True(separatorIndex < comparisonIndex, "The option terminator must precede the user-controlled comparison ref.");
+        var diffArguments = Assert.Single(runner.Commands, command => command.Count > 0 && command[0] == "diff");
+        Assert.Contains("0123456789abcdef0123456789abcdef01234567...HEAD", diffArguments);
+        Assert.DoesNotContain("--output=unexpected...HEAD", diffArguments);
     }
 
     private sealed class RecordingRunner : IGitProcessRunner
@@ -42,20 +46,18 @@ public sealed class GitRepositoryServiceArgumentSafetyTests
                 return Task.FromResult(new GitCommandResult(0, @"I:\Projects\sample", string.Empty));
             }
 
+            if (arguments.SequenceEqual(new[]
+                {
+                    "rev-parse", "--verify", "--end-of-options", "--output=unexpected^{commit}"
+                }))
+            {
+                return Task.FromResult(new GitCommandResult(
+                    0,
+                    "0123456789abcdef0123456789abcdef01234567",
+                    string.Empty));
+            }
+
             return Task.FromResult(new GitCommandResult(0, string.Empty, string.Empty));
         }
-    }
-}
-
-internal static class GitArgumentListTestExtensions
-{
-    public static int IndexOf(this IReadOnlyList<string> arguments, string value)
-    {
-        for (var index = 0; index < arguments.Count; index++)
-        {
-            if (string.Equals(arguments[index], value, StringComparison.Ordinal)) return index;
-        }
-
-        return -1;
     }
 }
