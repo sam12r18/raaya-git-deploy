@@ -117,6 +117,7 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         await ExecuteAsync(
             async () =>
             {
+                SelectedDiffText = null;
                 SelectedDiffText = await _repositoryService.GetDiffAsync(
                     repositoryPath,
                     item.Path,
