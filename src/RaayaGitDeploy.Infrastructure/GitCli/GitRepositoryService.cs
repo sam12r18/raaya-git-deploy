@@ -58,7 +58,8 @@ public sealed class GitRepositoryService : IGitRepositoryService
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
         ArgumentNullException.ThrowIfNull(request);
         var root = await RunRequiredAsync(repositoryPath, new[] { "rev-parse", "--show-toplevel" }, cancellationToken);
-        var arguments = new[] { "diff", "--name-status", "-M", "-z", "--", $"{request.BaseRef}...HEAD" };
+        var baseCommit = await ResolveCommitAsync(root, request.BaseRef, cancellationToken);
+        var arguments = new[] { "diff", "--name-status", "-M", "-z", $"{baseCommit}...HEAD" };
         var result = await _runner.RunAsync(root, arguments, cancellationToken);
         if (result.ExitCode != 0) throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
         return GitNameStatusParser.Parse(result.StandardOutput);
@@ -83,9 +84,16 @@ public sealed class GitRepositoryService : IGitRepositoryService
         var gitPath = NormalizeGitPath(path);
         ValidateRepositoryRelativePath(root, gitPath);
 
-        string[] arguments = baseRef is null
-            ? ["diff", "--no-color", "HEAD", "--", gitPath]
-            : ["diff", "--no-color", $"{baseRef}...HEAD", "--", gitPath];
+        string[] arguments;
+        if (baseRef is null)
+        {
+            arguments = ["diff", "--no-color", "HEAD", "--", gitPath];
+        }
+        else
+        {
+            var baseCommit = await ResolveCommitAsync(root, baseRef, cancellationToken);
+            arguments = ["diff", "--no-color", $"{baseCommit}...HEAD", "--", gitPath];
+        }
 
         var result = await _runner.RunAsync(root, arguments, cancellationToken);
         if (result.ExitCode != 0) throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
@@ -107,6 +115,15 @@ public sealed class GitRepositoryService : IGitRepositoryService
         try { text = StrictUtf8.GetString(bytes); }
         catch (DecoderFallbackException) { return string.Empty; }
         return BuildAllAddedPreview(gitPath, text);
+    }
+
+    private async Task<string> ResolveCommitAsync(string repositoryRoot, string baseRef, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseRef);
+        return await RunRequiredAsync(
+            repositoryRoot,
+            new[] { "rev-parse", "--verify", "--end-of-options", $"{baseRef}^{{commit}}" },
+            cancellationToken);
     }
 
     private static string NormalizeGitPath(string path) =>
