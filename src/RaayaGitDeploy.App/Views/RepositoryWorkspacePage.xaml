@@ -73,8 +73,14 @@
                                             <TextBlock Text="{Binding Path}" FontFamily="Consolas" TextWrapping="Wrap" />
                                             <StackPanel Orientation="Horizontal" Spacing="8">
                                                 <TextBlock Text="{Binding Kind}" />
-                                                <TextBlock Text="{Binding IsStaged, StringFormat='Staged: {0}'}" />
-                                                <TextBlock Text="{Binding IsUnstaged, StringFormat='Unstaged: {0}'}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <TextBlock Text="Staged:" />
+                                                    <TextBlock Text="{Binding IsStaged}" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <TextBlock Text="Unstaged:" />
+                                                    <TextBlock Text="{Binding IsUnstaged}" />
+                                                </StackPanel>
                                             </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>
