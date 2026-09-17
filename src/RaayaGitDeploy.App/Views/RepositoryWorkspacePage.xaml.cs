@@ -19,6 +19,8 @@ public sealed partial class RepositoryWorkspacePage : Page
 
         InitializeComponent();
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        WorkbenchNavigation.SelectedItem = WorkbenchNavigation.MenuItems[0];
+        UpdateSectionSurface();
     }
 
     public RepositoryWorkspaceViewModel ViewModel { get; }
@@ -46,6 +48,32 @@ public sealed partial class RepositoryWorkspacePage : Page
         }
 
         await ViewModel.CompareSinceAsync(BaseRefTextBox.Text, CancellationToken.None);
+    }
+
+    private void WorkbenchNavigation_SelectionChanged(
+        NavigationView sender,
+        NavigationViewSelectionChangedEventArgs args)
+    {
+        if (args.SelectedItemContainer?.Tag is not string tag ||
+            !Enum.TryParse<WorkspaceSection>(tag, out var section))
+        {
+            return;
+        }
+
+        ViewModel.SelectedSection = section;
+        UpdateSectionSurface();
+    }
+
+    private void UpdateSectionSurface()
+    {
+        var showChanges = ViewModel.SelectedSection == WorkspaceSection.Changes;
+        ChangesWorkspace.Visibility = showChanges ? Visibility.Visible : Visibility.Collapsed;
+        SectionPlaceholder.Visibility = showChanges ? Visibility.Collapsed : Visibility.Visible;
+        SectionTitle.Text = ViewModel.SelectedSection switch
+        {
+            WorkspaceSection.DeployQueue => "Deploy Queue",
+            _ => ViewModel.SelectedSection.ToString(),
+        };
     }
 
     private async void ChangesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -82,6 +110,12 @@ public sealed partial class RepositoryWorkspacePage : Page
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(RepositoryWorkspaceViewModel.SelectedSection))
+        {
+            UpdateSectionSurface();
+            return;
+        }
+
         if (e.PropertyName != nameof(RepositoryWorkspaceViewModel.ErrorMessage))
         {
             return;
