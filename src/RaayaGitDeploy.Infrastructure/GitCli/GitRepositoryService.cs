@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using RaayaGitDeploy.Core.Git;
 using RaayaGitDeploy.Core.Git.Parsing;
@@ -7,6 +8,8 @@ namespace RaayaGitDeploy.Infrastructure.GitCli;
 public sealed class GitRepositoryService : IGitRepositoryService
 {
     private const long DefaultMaxUntrackedPreviewBytes = 1024 * 1024;
+    private const char CommitFieldSeparator = '\u001f';
+    private const char CommitRecordSeparator = '\u001e';
 
     private static readonly UTF8Encoding StrictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
@@ -51,6 +54,23 @@ public sealed class GitRepositoryService : IGitRepositoryService
         var result = await _runner.RunAsync(root, arguments, cancellationToken);
         if (result.ExitCode != 0) throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
         return GitPorcelainV2Parser.Parse(result.StandardOutput);
+    }
+
+    public async Task<IReadOnlyList<GitCommitInfo>> GetRecentCommitsAsync(
+        string repositoryPath,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
+        if (limit is < 1 or > 200) throw new ArgumentOutOfRangeException(nameof(limit), limit, "Commit history limit must be between 1 and 200.");
+
+        var root = await RunRequiredAsync(repositoryPath, ["rev-parse", "--show-toplevel"], cancellationToken);
+        var format = $"%H{CommitFieldSeparator}%h{CommitFieldSeparator}%s{CommitFieldSeparator}%an{CommitFieldSeparator}%aI{CommitRecordSeparator}";
+        var arguments = new[] { "log", $"--max-count={limit}", $"--format={format}" };
+        var result = await _runner.RunAsync(root, arguments, cancellationToken);
+        if (result.ExitCode != 0) throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
+
+        return ParseCommitHistory(result.StandardOutput);
     }
 
     public async Task<IReadOnlyList<GitChange>> GetChangesSinceAsync(string repositoryPath, GitComparisonRequest request, CancellationToken cancellationToken)
@@ -115,6 +135,24 @@ public sealed class GitRepositoryService : IGitRepositoryService
         try { text = StrictUtf8.GetString(bytes); }
         catch (DecoderFallbackException) { return string.Empty; }
         return BuildAllAddedPreview(gitPath, text);
+    }
+
+    private static IReadOnlyList<GitCommitInfo> ParseCommitHistory(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return Array.Empty<GitCommitInfo>();
+
+        var commits = new List<GitCommitInfo>();
+        foreach (var record in output.Split(CommitRecordSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var fields = record.TrimStart('\r', '\n').Split(CommitFieldSeparator);
+            if (fields.Length != 5) throw new InvalidOperationException("git log returned malformed commit metadata.");
+            if (!DateTimeOffset.TryParse(fields[4].Trim(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var authorDate))
+                throw new InvalidOperationException("git log returned an invalid author date.");
+
+            commits.Add(new GitCommitInfo(fields[0], fields[1], fields[2], fields[3], authorDate));
+        }
+
+        return commits;
     }
 
     private async Task<string> ResolveCommitAsync(string repositoryRoot, string baseRef, CancellationToken cancellationToken)
