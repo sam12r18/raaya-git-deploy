@@ -66,14 +66,40 @@ public sealed partial class RepositoryWorkspacePage : Page
 
     private void UpdateSectionSurface()
     {
-        var showChanges = ViewModel.SelectedSection == WorkspaceSection.Changes;
-        ChangesWorkspace.Visibility = showChanges ? Visibility.Visible : Visibility.Collapsed;
-        SectionPlaceholder.Visibility = showChanges ? Visibility.Collapsed : Visibility.Visible;
-        SectionTitle.Text = ViewModel.SelectedSection switch
+        ChangesWorkspace.Visibility = Visibility.Collapsed;
+        CommitsWorkspace.Visibility = Visibility.Collapsed;
+        TerminalWorkspace.Visibility = Visibility.Collapsed;
+        CommandsWorkspace.Visibility = Visibility.Collapsed;
+        DeployQueueWorkspace.Visibility = Visibility.Collapsed;
+        ServersWorkspace.Visibility = Visibility.Collapsed;
+        HistoryWorkspace.Visibility = Visibility.Collapsed;
+
+        switch (ViewModel.SelectedSection)
         {
-            WorkspaceSection.DeployQueue => "Deploy Queue",
-            _ => ViewModel.SelectedSection.ToString(),
-        };
+            case WorkspaceSection.Changes:
+                ChangesWorkspace.Visibility = Visibility.Visible;
+                break;
+            case WorkspaceSection.Commits:
+                CommitsWorkspace.Visibility = Visibility.Visible;
+                break;
+            case WorkspaceSection.Terminal:
+                TerminalWorkspace.Visibility = Visibility.Visible;
+                break;
+            case WorkspaceSection.Commands:
+                CommandsWorkspace.Visibility = Visibility.Visible;
+                break;
+            case WorkspaceSection.DeployQueue:
+                DeployQueueWorkspace.Visibility = Visibility.Visible;
+                break;
+            case WorkspaceSection.Servers:
+                ServersWorkspace.Visibility = Visibility.Visible;
+                break;
+            case WorkspaceSection.History:
+                HistoryWorkspace.Visibility = Visibility.Visible;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
     }
 
     private async void ChangesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
