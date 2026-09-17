@@ -88,6 +88,27 @@ public sealed class GitRepositoryCommitDetailsTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_repositoryPath)) Directory.Delete(_repositoryPath, recursive: true);
+        if (!Directory.Exists(_repositoryPath)) return;
+
+        // Git for Windows can briefly retain handles after a child process exits.
+        // Retry cleanup so a successful integration assertion is not reported as a test failure.
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            try
+            {
+                Directory.Delete(_repositoryPath, recursive: true);
+                return;
+            }
+            catch (UnauthorizedAccessException) when (attempt < 5)
+            {
+                Thread.Sleep(100 * attempt);
+            }
+            catch (IOException) when (attempt < 5)
+            {
+                Thread.Sleep(100 * attempt);
+            }
+        }
+
+        Directory.Delete(_repositoryPath, recursive: true);
     }
 }
