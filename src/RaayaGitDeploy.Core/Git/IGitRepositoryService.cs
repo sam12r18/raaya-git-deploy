@@ -10,6 +10,11 @@ public interface IGitRepositoryService
         string path,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<GitCommitInfo>> GetRecentCommitsAsync(
+        string repositoryPath,
+        int limit,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<GitChange>> GetChangesSinceAsync(
         string repositoryPath,
         GitComparisonRequest request,
