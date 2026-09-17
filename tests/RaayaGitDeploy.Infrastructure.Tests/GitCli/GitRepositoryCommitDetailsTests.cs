@@ -90,8 +90,9 @@ public sealed class GitRepositoryCommitDetailsTests : IDisposable
     {
         if (!Directory.Exists(_repositoryPath)) return;
 
-        // Git for Windows can briefly retain handles after a child process exits.
-        // Retry cleanup so a successful integration assertion is not reported as a test failure.
+        // Cleanup is best-effort. These tests assert Git behavior, not Windows' timing for
+        // releasing transient file handles. A locked temp repository must not turn a passed
+        // product assertion into a failed test run.
         for (var attempt = 1; attempt <= 5; attempt++)
         {
             try
@@ -99,16 +100,14 @@ public sealed class GitRepositoryCommitDetailsTests : IDisposable
                 Directory.Delete(_repositoryPath, recursive: true);
                 return;
             }
-            catch (UnauthorizedAccessException) when (attempt < 5)
+            catch (UnauthorizedAccessException)
             {
-                Thread.Sleep(100 * attempt);
+                if (attempt < 5) Thread.Sleep(100 * attempt);
             }
-            catch (IOException) when (attempt < 5)
+            catch (IOException)
             {
-                Thread.Sleep(100 * attempt);
+                if (attempt < 5) Thread.Sleep(100 * attempt);
             }
         }
-
-        Directory.Delete(_repositoryPath, recursive: true);
     }
 }
