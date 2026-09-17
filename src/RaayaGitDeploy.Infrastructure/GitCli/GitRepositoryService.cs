@@ -65,7 +65,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
         if (limit is < 1 or > 200) throw new ArgumentOutOfRangeException(nameof(limit), limit, "Commit history limit must be between 1 and 200.");
 
         var root = await RunRequiredAsync(repositoryPath, ["rev-parse", "--show-toplevel"], cancellationToken);
-        var format = $"%H{CommitFieldSeparator}%h{CommitFieldSeparator}%s{CommitFieldSeparator}%an{CommitFieldSeparator}%aI{CommitRecordSeparator}";
+        var format = $"%H{CommitFieldSeparator}%s{CommitFieldSeparator}%an{CommitFieldSeparator}%aI{CommitRecordSeparator}";
         var arguments = new[] { "log", $"--max-count={limit}", $"--format={format}" };
         var result = await _runner.RunAsync(root, arguments, cancellationToken);
         if (result.ExitCode != 0) throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
@@ -145,11 +145,13 @@ public sealed class GitRepositoryService : IGitRepositoryService
         foreach (var record in output.Split(CommitRecordSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var fields = record.TrimStart('\r', '\n').Split(CommitFieldSeparator);
-            if (fields.Length != 5) throw new InvalidOperationException("git log returned malformed commit metadata.");
-            if (!DateTimeOffset.TryParse(fields[4].Trim(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var authorDate))
+            if (fields.Length != 4) throw new InvalidOperationException("git log returned malformed commit metadata.");
+            if (!DateTimeOffset.TryParse(fields[3].Trim(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var authorDate))
                 throw new InvalidOperationException("git log returned an invalid author date.");
 
-            commits.Add(new GitCommitInfo(fields[0], fields[1], fields[2], fields[3], authorDate));
+            var sha = fields[0];
+            var shortSha = sha[..Math.Min(8, sha.Length)];
+            commits.Add(new GitCommitInfo(sha, shortSha, fields[1], fields[2], authorDate));
         }
 
         return commits;
