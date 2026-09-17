@@ -13,6 +13,9 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
     private ReviewSession? _reviewSession;
 
     [ObservableProperty]
+    private WorkspaceSection selectedSection = WorkspaceSection.Changes;
+
+    [ObservableProperty]
     private string? repositoryPath;
 
     [ObservableProperty]
