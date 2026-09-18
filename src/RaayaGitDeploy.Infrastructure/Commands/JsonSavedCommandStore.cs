@@ -82,8 +82,8 @@ public sealed class JsonSavedCommandStore : ISavedCommandStore
         try
         {
             await using var stream = File.OpenRead(StoragePath);
-            return await JsonSerializer.DeserializeAsync<List<SavedCommand>>(stream, SerializerOptions, cancellationToken).ConfigureAwait(false)
-                ?? Array.Empty<SavedCommand>();
+            var commands = await JsonSerializer.DeserializeAsync<List<SavedCommand>>(stream, SerializerOptions, cancellationToken).ConfigureAwait(false);
+            return commands is null ? Array.Empty<SavedCommand>() : commands;
         }
         catch (JsonException)
         {
