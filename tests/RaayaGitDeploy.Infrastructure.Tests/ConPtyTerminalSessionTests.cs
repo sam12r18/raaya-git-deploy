@@ -1,3 +1,4 @@
+using RaayaGitDeploy.Core.Terminal;
 using RaayaGitDeploy.Infrastructure.Terminal;
 
 namespace RaayaGitDeploy.Infrastructure.Tests;
@@ -44,6 +45,25 @@ public sealed class ConPtyTerminalSessionTests
         Assert.Equal(TerminalSessionState.Running, second.State);
     }
 
+    [Fact]
+    public async Task OutputAndExit_AreForwarded_AndExitUpdatesState()
+    {
+        var adapter = new FakeTerminalProcessAdapter();
+        var session = new ConPtyTerminalSession(adapter);
+        string? output = null;
+        int? exitCode = null;
+        session.OutputReceived += (_, value) => output = value;
+        session.Exited += (_, value) => exitCode = value;
+
+        await session.StartAsync(@"C:\repo", CancellationToken.None);
+        adapter.EmitOutput("hello\r\n");
+        adapter.EmitExit(23);
+
+        Assert.Equal("hello\r\n", output);
+        Assert.Equal(23, exitCode);
+        Assert.Equal(TerminalSessionState.Exited, session.State);
+    }
+
     private sealed class FakeTerminalProcessAdapter : ITerminalProcessAdapter
     {
         public string? StartedWorkingDirectory { get; private set; }
@@ -74,9 +94,12 @@ public sealed class ConPtyTerminalSessionTests
         public Task StopAsync(CancellationToken cancellationToken)
         {
             StopCount++;
-            Exited?.Invoke(this, 0);
+            EmitExit(0);
             return Task.CompletedTask;
         }
+
+        public void EmitOutput(string output) => OutputReceived?.Invoke(this, output);
+        public void EmitExit(int exitCode) => Exited?.Invoke(this, exitCode);
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
