@@ -56,7 +56,7 @@ public sealed class JsonServerProfileStore : IServerProfileStore
         if (!File.Exists(StoragePath)) return Array.Empty<ServerProfile>();
         await using var stream = File.OpenRead(StoragePath);
         var profiles = await JsonSerializer.DeserializeAsync<List<ServerProfile>>(stream, SerializerOptions, cancellationToken).ConfigureAwait(false);
-        return profiles ?? Array.Empty<ServerProfile>();
+        return profiles is null ? Array.Empty<ServerProfile>() : profiles;
     }
 
     private async Task SaveCoreAsync(IReadOnlyCollection<ServerProfile> profiles, CancellationToken cancellationToken)
