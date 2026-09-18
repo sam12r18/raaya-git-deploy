@@ -29,7 +29,9 @@ public sealed class DeploymentPlanner
             }
 
             var remoteRelativePath = relativePath.Replace('\\', '/');
-            var remotePath = $"{normalizedRemoteRoot}/{remoteRelativePath}";
+            var remotePath = normalizedRemoteRoot.Length == 0
+                ? $"/{remoteRelativePath}"
+                : $"{normalizedRemoteRoot}/{remoteRelativePath}";
 
             operations.Add(new DeploymentOperation(
                 DeploymentOperationKind.Upload,
@@ -55,7 +57,7 @@ public sealed class DeploymentPlanner
     private static string NormalizeRemoteRoot(string remoteRoot)
     {
         var normalized = remoteRoot.Replace('\\', '/');
-        if (!normalized.StartsWith('/', StringComparison.Ordinal))
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
         {
             throw new ArgumentException("Remote root must be an absolute POSIX path.", nameof(remoteRoot));
         }
