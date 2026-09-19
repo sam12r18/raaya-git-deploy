@@ -44,7 +44,7 @@ public sealed class DeploymentWorkspaceViewModel
         var profile = Servers.SelectedProfile ?? throw new InvalidOperationException("Select a server profile before deployment.");
         if (PreviewPlan is null) throw new InvalidOperationException("Run Dry Run before deployment.");
 
-        var plan = _planner.BuildPlan(repositoryRoot, profile, Queue.Items, isDryRun: false);
+        var plan = _planner.Plan(repositoryRoot, profile.RemoteRoot, Queue.Items, dryRun: false);
         var startedAt = DateTimeOffset.UtcNow;
         var result = await _executor.ExecuteAsync(profile, plan, cancellationToken);
         LastResult = result;
