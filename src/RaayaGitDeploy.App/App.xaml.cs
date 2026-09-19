@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using RaayaGitDeploy.App.Bootstrap;
+using RaayaGitDeploy.Presentation.Terminal;
 using RaayaGitDeploy.Presentation.Workspace;
 
 namespace RaayaGitDeploy.App;
@@ -22,7 +23,8 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         var viewModel = Services.GetRequiredService<RepositoryWorkspaceViewModel>();
-        _window = new MainWindow(viewModel);
+        var terminalViewModel = Services.GetRequiredService<TerminalViewModel>();
+        _window = new MainWindow(viewModel, terminalViewModel);
         _window.Activate();
     }
 }
