@@ -25,7 +25,8 @@
             <Border Style="{StaticResource M3SurfaceCardStyle}">
                 <StackPanel Spacing="{StaticResource M3SpaceMd}">
                     <TextBlock Text="Target mapping" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                    <TextBox x:Name="ServerProfileId" Header="Host profile" PlaceholderText="Select a validated host profile" />
+                    <ComboBox x:Name="ServerProfile" Header="Validated host profile" DisplayMemberPath="Name" PlaceholderText="Select a host profile" SelectionChanged="ServerProfile_SelectionChanged" />
+                    <InfoBar x:Name="HostProfileInfo" IsOpen="True" IsClosable="False" Severity="Informational" Message="Select a saved host profile. Connection validation is required before deployment and credentials remain outside the project definition." />
                     <TextBox x:Name="ApplicationRoot" Header="Application root" PlaceholderText="/home/user/core" />
                     <TextBox x:Name="PublicRoot" Header="Public root (optional)" PlaceholderText="/home/user/public_html" />
                     <ComboBox x:Name="Strategy" Header="Deployment strategy" SelectedIndex="0">
