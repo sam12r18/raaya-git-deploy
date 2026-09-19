@@ -1,13 +1,30 @@
 <Application
     x:Class="RaayaGitDeploy.App.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    RequestedTheme="Dark">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Material 3 aligned semantic tokens. Keep controls on ThemeResource brushes
+                 so system light/dark/high-contrast behavior remains available. -->
+            <x:Double x:Key="M3SpaceXs">4</x:Double>
+            <x:Double x:Key="M3SpaceSm">8</x:Double>
+            <x:Double x:Key="M3SpaceMd">12</x:Double>
+            <x:Double x:Key="M3SpaceLg">20</x:Double>
+            <x:Double x:Key="M3SpaceXl">24</x:Double>
+            <x:Double x:Key="M3ContentMaxWidth">760</x:Double>
+            <CornerRadius x:Key="M3ShapeMedium">12</CornerRadius>
+            <CornerRadius x:Key="M3ShapeLarge">16</CornerRadius>
+            <Thickness x:Key="M3ContainerPadding">20</Thickness>
+
+            <Style x:Key="M3SurfaceCardStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="{StaticResource M3ShapeLarge}" />
+                <Setter Property="Padding" Value="{StaticResource M3ContainerPadding}" />
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
