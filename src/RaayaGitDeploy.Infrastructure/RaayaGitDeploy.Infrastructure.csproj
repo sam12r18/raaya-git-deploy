@@ -8,5 +8,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RaayaGitDeploy.Core\RaayaGitDeploy.Core.csproj" />
+    <PackageReference Include="SSH.NET" Version="2025.1.0" />
   </ItemGroup>
 </Project>
