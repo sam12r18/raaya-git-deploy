@@ -13,15 +13,7 @@ public sealed class DeploymentDryRunViewModelTests
         queue.AddFile(Path.Combine(repositoryRoot, "src", "App.cs"));
         queue.AddFile(Path.Combine(repositoryRoot, "assets", "app.js"));
 
-        var profile = new ServerProfile(
-            Guid.NewGuid(),
-            "Production",
-            "example.test",
-            22,
-            "deploy",
-            "/var/www/app",
-            ServerAuthenticationMode.PrivateKey,
-            "prod-key");
+        var profile = Profile("prod", "Production");
         var viewModel = new DeploymentDryRunViewModel(new DeploymentPlanner());
 
         var plan = viewModel.Preview(repositoryRoot, profile, queue.Items);
@@ -47,19 +39,13 @@ public sealed class DeploymentDryRunViewModelTests
     {
         var repositoryRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "raaya-workbench-repo"));
         var outsidePath = Path.GetFullPath(Path.Combine(repositoryRoot, "..", "secret.txt"));
-        var profile = new ServerProfile(
-            Guid.NewGuid(),
-            "Production",
-            "example.test",
-            22,
-            "deploy",
-            "/var/www/app",
-            ServerAuthenticationMode.PrivateKey,
-            "prod-key");
         var queueItem = new DeploymentQueueItem(outsidePath, DeploymentQueueSource.ManualFile);
         var viewModel = new DeploymentDryRunViewModel(new DeploymentPlanner());
 
         Assert.Throws<InvalidOperationException>(() =>
-            viewModel.Preview(repositoryRoot, profile, [queueItem]));
+            viewModel.Preview(repositoryRoot, Profile("prod", "Production"), [queueItem]));
     }
+
+    private static ServerProfile Profile(string id, string name) =>
+        new(id, name, "example.test", 22, "deploy", "/var/www/app", ServerAuthenticationMode.SshKey, "key-ref");
 }
