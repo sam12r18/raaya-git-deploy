@@ -1,0 +1,55 @@
+using RaayaGitDeploy.Core.Deployment;
+using RaayaGitDeploy.Presentation.Deployment;
+
+namespace RaayaGitDeploy.Presentation.Tests.Deployment;
+
+public sealed class DeploymentWorkspaceViewModelTests
+{
+    [Fact]
+    public async Task Preview_Uses_Shared_Queue_And_Selected_Server()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "raaya-workbench-preview");
+        var localPath = Path.Combine(root, "src", "App.cs");
+        var profile = new ServerProfile("prod", "Production", "example.test", 22, "deploy", "/var/www/app", ServerAuthenticationMode.SshKey, "key:prod");
+        var store = new FakeStore(profile);
+        var queue = new DeploymentQueueViewModel();
+        var servers = new ServersViewModel(store, new FakeTransport());
+        var sut = new DeploymentWorkspaceViewModel(queue, servers, new DeploymentDryRunViewModel(new DeploymentPlanner()));
+
+        await sut.LoadServersAsync(CancellationToken.None);
+        queue.AddFile(localPath);
+
+        var plan = sut.CreateDryRunPreview(root);
+
+        Assert.True(plan.IsDryRun);
+        var operation = Assert.Single(plan.Operations);
+        Assert.Equal("/var/www/app/src/App.cs", operation.RemotePath);
+    }
+
+    [Fact]
+    public void Preview_Requires_A_Selected_Server()
+    {
+        var sut = new DeploymentWorkspaceViewModel(
+            new DeploymentQueueViewModel(),
+            new ServersViewModel(new FakeStore(), new FakeTransport()),
+            new DeploymentDryRunViewModel(new DeploymentPlanner()));
+
+        Assert.Throws<InvalidOperationException>(() => sut.CreateDryRunPreview(Path.GetTempPath()));
+    }
+
+    private sealed class FakeStore(params ServerProfile[] profiles) : IServerProfileStore
+    {
+        private readonly List<ServerProfile> _profiles = [.. profiles];
+        public Task<IReadOnlyList<ServerProfile>> LoadAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ServerProfile>>(_profiles);
+        public Task UpsertAsync(ServerProfile profile, CancellationToken cancellationToken) { _profiles.RemoveAll(x => x.Id == profile.Id); _profiles.Add(profile); return Task.CompletedTask; }
+        public Task DeleteAsync(string id, CancellationToken cancellationToken) { _profiles.RemoveAll(x => x.Id == id); return Task.CompletedTask; }
+    }
+
+    private sealed class FakeTransport : IRemoteTransport
+    {
+        public Task TestConnectionAsync(ServerProfile profile, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyList<string>> ListAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<string>>([]);
+        public Task UploadAsync(ServerProfile profile, string localPath, string remotePath, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task DeleteAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+}
