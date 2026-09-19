@@ -31,9 +31,13 @@ public static class ServiceRegistration
         services.AddTransient<ICommandExecutionService, TerminalCommandExecutionService>();
         services.AddTransient<CommandsViewModel>();
 
-        services.AddSingleton<IServerProfileStore>(_ => new JsonServerProfileStore(
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RaayaGitDeploy", "servers.json")));
-        services.AddSingleton<IRemoteTransport, UnavailableRemoteTransport>();
+        var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RaayaGitDeploy");
+        services.AddSingleton<IServerProfileStore>(_ => new JsonServerProfileStore(Path.Combine(appData, "servers.json")));
+        services.AddSingleton<IHostKeyVerifier>(_ => new TofuHostKeyVerifier(Path.Combine(appData, "known-hosts")));
+        services.AddTransient<ISftpClientAdapter>(_ => throw new InvalidOperationException("Resolve SFTP adapters through the profile factory."));
+        services.AddSingleton<IRemoteTransport>(provider => new SftpRemoteTransport(
+            profile => new SshNetSftpClientAdapter(profile),
+            provider.GetRequiredService<IHostKeyVerifier>()));
         services.AddTransient<DeploymentQueueViewModel>();
         services.AddTransient<ServersViewModel>();
         services.AddTransient<DeploymentPlanner>();
@@ -42,14 +46,5 @@ public static class ServiceRegistration
         services.AddTransient<RepositoryWorkspaceViewModel>();
 
         return services;
-    }
-
-    private sealed class UnavailableRemoteTransport : IRemoteTransport
-    {
-        private static NotSupportedException Error() => new("Real SFTP connection is not wired yet. Profiles and Dry Run are available; remote operations remain disabled.");
-        public Task TestConnectionAsync(ServerProfile profile, CancellationToken cancellationToken) => Task.FromException(Error());
-        public Task<IReadOnlyList<string>> ListAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.FromException<IReadOnlyList<string>>(Error());
-        public Task UploadAsync(ServerProfile profile, string localPath, string remotePath, CancellationToken cancellationToken) => Task.FromException(Error());
-        public Task DeleteAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.FromException(Error());
     }
 }
