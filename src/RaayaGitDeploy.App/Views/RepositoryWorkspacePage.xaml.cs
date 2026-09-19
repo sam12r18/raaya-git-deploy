@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using RaayaGitDeploy.Core.Git;
 using RaayaGitDeploy.Core.Review;
+using RaayaGitDeploy.Presentation.Terminal;
 using RaayaGitDeploy.Presentation.Workspace;
 
 namespace RaayaGitDeploy.App.Views;
@@ -10,14 +11,22 @@ namespace RaayaGitDeploy.App.Views;
 public sealed partial class RepositoryWorkspacePage : Page
 {
     private readonly RepositoryOpenCoordinator _openCoordinator;
+    private readonly TerminalViewModel _terminal;
+    private readonly DispatcherTimer _terminalRefreshTimer;
+    private string? _terminalRepository;
 
-    public RepositoryWorkspacePage(RepositoryWorkspaceViewModel viewModel, RepositoryOpenCoordinator openCoordinator)
+    public RepositoryWorkspacePage(RepositoryWorkspaceViewModel viewModel, TerminalViewModel terminalViewModel, RepositoryOpenCoordinator openCoordinator)
     {
         ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _terminal = terminalViewModel ?? throw new ArgumentNullException(nameof(terminalViewModel));
         _openCoordinator = openCoordinator ?? throw new ArgumentNullException(nameof(openCoordinator));
         InitializeComponent();
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         WorkbenchNavigation.SelectedItem = WorkbenchNavigation.MenuItems[0];
+        _terminalRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        _terminalRefreshTimer.Tick += (_, _) => RefreshTerminalSurface();
+        _terminalRefreshTimer.Start();
+        Unloaded += async (_, _) => { _terminalRefreshTimer.Stop(); await _terminal.DisposeAsync(); };
         UpdateSectionSurface();
     }
 
@@ -61,11 +70,54 @@ public sealed partial class RepositoryWorkspacePage : Page
         }
     }
 
-    private async void ChangesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void TerminalStart_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository before starting the terminal.");
+            if (!string.Equals(_terminalRepository, ViewModel.RepositoryPath, StringComparison.OrdinalIgnoreCase))
+            {
+                await _terminal.SwitchRepositoryAsync(ViewModel.RepositoryPath, CancellationToken.None);
+                _terminalRepository = ViewModel.RepositoryPath;
+            }
+            await _terminal.StartAsync(CancellationToken.None);
+            RefreshTerminalSurface();
+        }
+        catch (Exception ex) { ShowError(ex.Message); }
+    }
+
+    private async void TerminalSend_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(TerminalInput.Text)) return;
+            var command = TerminalInput.Text;
+            TerminalInput.Text = string.Empty;
+            await _terminal.SendAsync(command, CancellationToken.None);
+        }
+        catch (Exception ex) { ShowError(ex.Message); }
+    }
+
+    private async void TerminalStop_Click(object sender, RoutedEventArgs e)
+    {
+        try { await _terminal.StopAsync(CancellationToken.None); RefreshTerminalSurface(); }
+        catch (Exception ex) { ShowError(ex.Message); }
+    }
+
+    private void RefreshTerminalSurface()
+    {
+        if (TerminalOutput is null) return;
+        if (TerminalOutput.Text != _terminal.Output) TerminalOutput.Text = _terminal.Output;
+        TerminalState.Text = _terminal.IsRunning ? "Running" : _terminal.ExitCode is int code ? $"Exited ({code})" : "Stopped";
+    }
+
+    private void ChangesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (ViewModel.IsBusy || ChangesList.SelectedItem is not ChangeItemViewModel item) return;
-        await ViewModel.LoadDiffAsync(item, CancellationToken.None);
+        _ = LoadDiffAsync(item);
     }
+
+    private async Task LoadDiffAsync(ChangeItemViewModel item) => await ViewModel.LoadDiffAsync(item, CancellationToken.None);
 
     private async void CommitsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -95,7 +147,12 @@ public sealed partial class RepositoryWorkspacePage : Page
     {
         if (e.PropertyName == nameof(RepositoryWorkspaceViewModel.SelectedSection)) { UpdateSectionSurface(); return; }
         if (e.PropertyName != nameof(RepositoryWorkspaceViewModel.ErrorMessage)) return;
-        ErrorInfoBar.Message = ViewModel.ErrorMessage ?? string.Empty;
-        ErrorInfoBar.IsOpen = !string.IsNullOrWhiteSpace(ViewModel.ErrorMessage);
+        ShowError(ViewModel.ErrorMessage ?? string.Empty);
+    }
+
+    private void ShowError(string message)
+    {
+        ErrorInfoBar.Message = message;
+        ErrorInfoBar.IsOpen = !string.IsNullOrWhiteSpace(message);
     }
 }
