@@ -24,7 +24,7 @@ public sealed class JsonDeploymentHistoryStore : IDeploymentHistoryStore
             if (!File.Exists(StoragePath)) return Array.Empty<DeploymentHistoryEntry>();
             await using var stream = File.OpenRead(StoragePath);
             return await JsonSerializer.DeserializeAsync<List<DeploymentHistoryEntry>>(stream, SerializerOptions, cancellationToken).ConfigureAwait(false)
-                ?? Array.Empty<DeploymentHistoryEntry>();
+                ?? [];
         }
         finally { _gate.Release(); }
     }
