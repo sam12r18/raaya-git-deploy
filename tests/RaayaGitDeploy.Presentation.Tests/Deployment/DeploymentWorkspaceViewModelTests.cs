@@ -27,6 +27,29 @@ public sealed class DeploymentWorkspaceViewModelTests
     }
 
     [Fact]
+    public async Task RefreshPreview_Exposes_Bindable_Dry_Run_State()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "raaya-workbench-bindable-preview");
+        var localPath = Path.Combine(root, "dist", "app.js");
+        var profile = new ServerProfile("stage", "Staging", "stage.example.test", 22, "deploy", "/srv/app", ServerAuthenticationMode.SshKey, "key:stage");
+        var queue = new DeploymentQueueViewModel();
+        var sut = new DeploymentWorkspaceViewModel(
+            queue,
+            new ServersViewModel(new FakeStore(profile), new FakeTransport()),
+            new DeploymentDryRunViewModel(new DeploymentPlanner()));
+
+        await sut.LoadServersAsync(CancellationToken.None);
+        queue.AddFile(localPath);
+
+        sut.RefreshDryRunPreview(root);
+
+        Assert.NotNull(sut.PreviewPlan);
+        Assert.True(sut.PreviewPlan!.IsDryRun);
+        var operation = Assert.Single(sut.PreviewPlan.Operations);
+        Assert.Equal("/srv/app/dist/app.js", operation.RemotePath);
+    }
+
+    [Fact]
     public void Preview_Requires_A_Selected_Server()
     {
         var sut = new DeploymentWorkspaceViewModel(
