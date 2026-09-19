@@ -1,6 +1,6 @@
 # Git → Host Auto Deploy — Checkpoint
 
-Updated: 2026-09-19
+Updated: 2026-09-20
 Branch: `feat/git-host-auto-deploy`
 
 ## Milestone 1
@@ -13,14 +13,16 @@ Target flow: Project → Repository/Branch → Host validation → Revision → 
 - `DeploymentPlanner` enforces protected paths as `Skip` operations rather than uploads.
 - SFTP remains the first transport behind the existing transport abstraction; cPanel without SSH must be implemented as another adapter, not a special case in the project model.
 - Project definition has a presentation validation contract and reusable WinUI editor component.
-- `HostProfileEditorViewModel` now creates validated SSH-key host profiles and exposes explicit Idle/Validating/Success/Error connection states.
-- Host validation reuses `ServersViewModel` + `IRemoteTransport`; raw private key material is not accepted by this editor contract, only a credential/key reference.
+- `HostProfileEditorViewModel` creates validated SSH-key host profiles and exposes Idle/Validating/Success/Error connection states.
+- Host validation reuses the existing remote transport abstraction; raw private key material is not accepted by the editor contract, only a credential/key reference.
+- Material-3-aligned spacing, shape, content-width and surface-card resources are now centralized in `App.xaml`; `DeploymentProjectEditor` consumes these shared tokens rather than defining local duplicates.
+- The application no longer forces `RequestedTheme="Dark"`, leaving native WinUI theme selection available for Light/Dark/system behavior while semantic ThemeResource brushes remain in use.
 
 ### UI contract
 
-The current desktop stack is WinUI 3 / Windows App SDK. There is no Google-official Material 3 WinUI control package in the project, so this workstream does not add a parallel UI framework merely for branding. Native accessible WinUI controls are reused while Material 3 principles are represented through centralized component geometry/tokens and component composition. A package should only be added after compatibility, maintenance and license review demonstrates a real benefit.
+The current desktop stack is WinUI 3 / Windows App SDK. There is no Google-official Material 3 WinUI control package in the project, so this workstream does not add a parallel UI framework merely for branding. Native accessible WinUI controls are reused while Material 3 principles are represented through centralized tokens and component composition. A package should only be added after compatibility, maintenance and license review demonstrates a real benefit.
 
-`DeploymentProjectEditor` provides Source, Target Mapping, Strategy and Protected Paths sections with validation/error state. The host-profile presentation contract is now ready for a reusable `HostProfileCard` / `ConnectionStatus` UI with real asynchronous loading/disabled/success/error states.
+`DeploymentProjectEditor` provides Source, Target Mapping, Strategy and Protected Paths sections with validation/error state. Shared tokens now cover spacing, large/medium shapes, content width, container padding and surface-card composition. The host-profile presentation contract is ready for a reusable `HostProfileCard` / `ConnectionStatus` UI with real asynchronous loading/disabled/success/error states.
 
 ### Safety decisions
 
@@ -32,21 +34,23 @@ The current desktop stack is WinUI 3 / Windows App SDK. There is no Google-offic
 
 ### Verification
 
-- Host profile validation tests were added, but `dotnet test` / WinUI build are **UNTESTED** in this run because the GitHub connector does not provide an executable repository workspace/.NET runtime.
+- Source-level XAML/token refactor completed.
+- `dotnet test` / WinUI build: **UNTESTED** in this run because the GitHub connector does not provide an executable repository workspace/.NET runtime.
 - UI visual/runtime QA: **UNTESTED** until built on Windows.
 
 ### UI/UX review
 
 **MUST-FIX**
-- Move temporary component spacing/shape resources into centralized application design tokens before HostProfileCard duplicates them.
 - Replace free-text Host profile field with the reusable selector/card backed by `HostProfileEditorViewModel`.
-- Bind connection states to visible Material-3-aligned progress/status treatment and disable duplicate connection attempts while validating.
+- Bind connection states to visible progress/status treatment and disable duplicate connection attempts while validating.
 - Do not expose raw key path/private-key contents in the normal profile form; select a credential reference through the secure credential layer when that UI exists.
+- Validate the centralized resources with a real WinUI build before expanding their use to additional controls.
 
 **POLISH/LATER**
+- Add explicit semantic color/elevation/state-layer aliases only when a second component demonstrates the need; avoid speculative token growth.
 - Adaptive two-column layout for wide windows after the complete Milestone 1 form exists.
 - RTL localization after functional labels/copy stabilize; component layout must remain direction-safe.
 
 ## Exact next step
 
-Build `HostProfileCard` + `ConnectionStatus` on the new host editor contract, replace the Project editor free-text host id with a real profile selector, then add Repository/Branch selection backed by existing Git contracts. After that connect `DeploymentPlanner` to a Material-3-aligned `DryRunSummary` component.
+Build `HostProfileCard` + `ConnectionStatus` on the host editor contract and replace the Project editor free-text host id with a real profile selector. Then add Repository/Branch selection backed by existing Git contracts. After that connect `DeploymentPlanner` to a Material-3-aligned `DryRunSummary` component.
