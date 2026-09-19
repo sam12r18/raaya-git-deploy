@@ -1,8 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
+using RaayaGitDeploy.Core.Commands;
 using RaayaGitDeploy.Core.Git;
 using RaayaGitDeploy.Core.Terminal;
+using RaayaGitDeploy.Infrastructure.Commands;
 using RaayaGitDeploy.Infrastructure.GitCli;
 using RaayaGitDeploy.Infrastructure.Terminal;
+using RaayaGitDeploy.Presentation.Commands;
 using RaayaGitDeploy.Presentation.Terminal;
 using RaayaGitDeploy.Presentation.Workspace;
 
@@ -20,6 +23,10 @@ public static class ServiceRegistration
         services.AddTransient<ITerminalSessionFactory>(provider =>
             new ConPtyTerminalSessionFactory(() => provider.GetRequiredService<ITerminalProcessAdapter>()));
         services.AddTransient<TerminalViewModel>();
+        services.AddSingleton<ISavedCommandStore>(_ => new JsonSavedCommandStore(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RaayaGitDeploy", "commands.json")));
+        services.AddTransient<ICommandExecutionService, TerminalCommandExecutionService>();
+        services.AddTransient<CommandsViewModel>();
         services.AddTransient<RepositoryWorkspaceViewModel>();
 
         return services;
