@@ -53,4 +53,36 @@ public sealed class DeploymentPlannerTests
         Assert.True(plan.IsDryRun);
         Assert.All(plan.Operations, operation => Assert.Equal(DeploymentOperationKind.Upload, operation.Kind));
     }
+
+    [Fact]
+    public void ProjectPlan_MarksProtectedPathsAsSkipped()
+    {
+        var planner = new DeploymentPlanner();
+        var repositoryRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "repo"));
+        var project = DeploymentProject.Create(
+            "shop-production",
+            "Shop Production",
+            repositoryRoot,
+            "origin",
+            "main",
+            "cpanel-production",
+            "/home/example/core",
+            "/home/example/public_html",
+            DeploymentStrategy.Laravel,
+            ["public/user-content"]);
+
+        var envPath = Path.Combine(repositoryRoot, ".env");
+        var storagePath = Path.Combine(repositoryRoot, "storage", "logs", "laravel.log");
+        var uploadPath = Path.Combine(repositoryRoot, "public", "user-content", "avatar.webp");
+        var sourcePath = Path.Combine(repositoryRoot, "app", "Http", "Controllers", "HomeController.php");
+
+        var plan = planner.Plan(project, [envPath, storagePath, uploadPath, sourcePath], dryRun: true);
+
+        Assert.True(plan.IsDryRun);
+        Assert.Equal(4, plan.Operations.Count);
+        Assert.Equal(DeploymentOperationKind.Skip, plan.Operations[0].Kind);
+        Assert.Equal(DeploymentOperationKind.Skip, plan.Operations[1].Kind);
+        Assert.Equal(DeploymentOperationKind.Skip, plan.Operations[2].Kind);
+        Assert.Equal(DeploymentOperationKind.Upload, plan.Operations[3].Kind);
+    }
 }
