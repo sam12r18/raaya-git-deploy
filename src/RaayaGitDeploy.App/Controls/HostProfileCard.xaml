@@ -1,0 +1,33 @@
+<UserControl
+    x:Class="RaayaGitDeploy.App.Controls.HostProfileCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource M3SurfaceCardStyle}">
+        <StackPanel Spacing="{StaticResource M3SpaceMd}">
+            <StackPanel Spacing="{StaticResource M3SpaceXs}">
+                <TextBlock Text="Host profile" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                <TextBlock Text="Validate a secure SSH/SFTP target. Secret material is referenced, never stored in this form." TextWrapping="Wrap" Opacity="0.72" />
+            </StackPanel>
+
+            <TextBox x:Name="DisplayName" Header="Profile name" PlaceholderText="Production cPanel" />
+            <Grid ColumnSpacing="{StaticResource M3SpaceMd}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="128" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="Host" Header="Host" PlaceholderText="server.example.com" />
+                <NumberBox x:Name="Port" Grid.Column="1" Header="Port" Value="22" Minimum="1" Maximum="65535" SpinButtonPlacementMode="Compact" />
+            </Grid>
+            <TextBox x:Name="Username" Header="Username" />
+            <TextBox x:Name="RemoteRoot" Header="Remote root" PlaceholderText="/home/user" />
+            <TextBox x:Name="KeyReference" Header="SSH key reference" PlaceholderText="Credential/key identifier" />
+
+            <InfoBar x:Name="ConnectionInfo" IsOpen="False" IsClosable="False" />
+            <ProgressBar x:Name="ConnectionProgress" IsIndeterminate="True" Visibility="Collapsed" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="{StaticResource M3SpaceSm}">
+                <Button x:Name="TestConnectionButton" Content="Save &amp; test connection" Click="TestConnection_Click" Style="{ThemeResource AccentButtonStyle}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>
