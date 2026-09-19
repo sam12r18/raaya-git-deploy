@@ -19,32 +19,28 @@ public static class ServiceRegistration
     public static IServiceCollection AddRaayaGitDeployServices(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
-
         services.AddSingleton<IGitProcessRunner, GitProcessRunner>();
         services.AddSingleton<IGitRepositoryService, GitRepositoryService>();
         services.AddTransient<ITerminalProcessAdapter, PowerShellProcessAdapter>();
-        services.AddTransient<ITerminalSessionFactory>(provider =>
-            new ConPtyTerminalSessionFactory(() => provider.GetRequiredService<ITerminalProcessAdapter>()));
+        services.AddTransient<ITerminalSessionFactory>(provider => new ConPtyTerminalSessionFactory(() => provider.GetRequiredService<ITerminalProcessAdapter>()));
         services.AddTransient<TerminalViewModel>();
-        services.AddSingleton<ISavedCommandStore>(_ => new JsonSavedCommandStore(
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RaayaGitDeploy", "commands.json")));
+        services.AddSingleton<ISavedCommandStore>(_ => new JsonSavedCommandStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RaayaGitDeploy", "commands.json")));
         services.AddTransient<ICommandExecutionService, TerminalCommandExecutionService>();
         services.AddTransient<CommandsViewModel>();
 
         var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RaayaGitDeploy");
         services.AddSingleton<IServerProfileStore>(_ => new JsonServerProfileStore(Path.Combine(appData, "servers.json")));
+        services.AddSingleton<IDeploymentHistoryStore>(_ => new JsonDeploymentHistoryStore(Path.Combine(appData, "deployment-history.json")));
         services.AddSingleton<IHostKeyVerifier>(_ => new TofuHostKeyVerifier(Path.Combine(appData, "known-hosts")));
         services.AddTransient<ISftpClientAdapter>(_ => throw new InvalidOperationException("Resolve SFTP adapters through the profile factory."));
-        services.AddSingleton<IRemoteTransport>(provider => new SftpRemoteTransport(
-            profile => new SshNetSftpClientAdapter(profile),
-            provider.GetRequiredService<IHostKeyVerifier>()));
+        services.AddSingleton<IRemoteTransport>(provider => new SftpRemoteTransport(profile => new SshNetSftpClientAdapter(profile), provider.GetRequiredService<IHostKeyVerifier>()));
         services.AddTransient<DeploymentQueueViewModel>();
         services.AddTransient<ServersViewModel>();
         services.AddTransient<DeploymentPlanner>();
         services.AddTransient<DeploymentDryRunViewModel>();
+        services.AddTransient<DeploymentExecutor>();
         services.AddTransient<DeploymentWorkspaceViewModel>();
         services.AddTransient<RepositoryWorkspaceViewModel>();
-
         return services;
     }
 }
