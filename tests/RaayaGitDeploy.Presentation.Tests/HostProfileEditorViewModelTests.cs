@@ -6,7 +6,7 @@ namespace RaayaGitDeploy.Presentation.Tests;
 public sealed class HostProfileEditorViewModelTests
 {
     [Fact]
-    public void CreateProfile_RejectsRawMissingKeyReference()
+    public void CreateProfile_RejectsMissingKeyReference()
     {
         var sut = CreateSut();
         sut.DisplayName = "Production";
@@ -52,7 +52,8 @@ public sealed class HostProfileEditorViewModelTests
     private sealed class StubTransport : IRemoteTransport
     {
         public Task TestConnectionAsync(ServerProfile profile, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task UploadFileAsync(ServerProfile profile, string localPath, string remotePath, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ExecuteCommandAsync(ServerProfile profile, string command, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyList<string>> ListAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<string>>([]);
+        public Task UploadAsync(ServerProfile profile, string localPath, string remotePath, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task DeleteAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
