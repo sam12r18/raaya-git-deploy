@@ -42,6 +42,35 @@ public sealed class DeploymentPlanner
         return new DeploymentPlan(operations, dryRun);
     }
 
+    public DeploymentPlan Plan(
+        DeploymentProject project,
+        IEnumerable<string> localPaths,
+        bool dryRun = false)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(localPaths);
+
+        var candidatePaths = localPaths.ToArray();
+        var basePlan = Plan(project.RepositoryRoot, project.ApplicationRoot, candidatePaths, dryRun);
+        var operations = new List<DeploymentOperation>(basePlan.Operations.Count);
+
+        foreach (var operation in basePlan.Operations)
+        {
+            var relativePath = Path.GetRelativePath(project.RepositoryRoot, operation.LocalPath)
+                .Replace('\\', '/');
+
+            if (project.IsProtected(relativePath))
+            {
+                operations.Add(operation with { Kind = DeploymentOperationKind.Skip });
+                continue;
+            }
+
+            operations.Add(operation);
+        }
+
+        return new DeploymentPlan(operations, dryRun);
+    }
+
     private static bool IsOutsideRepository(string relativePath)
     {
         if (Path.IsPathRooted(relativePath))
