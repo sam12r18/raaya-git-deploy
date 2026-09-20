@@ -16,6 +16,8 @@ public sealed partial class DeploymentProjectEditor : UserControl
 
     public event EventHandler<DeploymentProject>? ProjectValidated;
 
+    public DeploymentProjectEditorViewModel? ViewModel { get; set; }
+
     public IReadOnlyList<ServerProfile> HostProfiles
     {
         get => _hostProfiles;
@@ -26,6 +28,27 @@ public sealed partial class DeploymentProjectEditor : UserControl
             ServerProfile.SelectedItem = _hostProfiles.FirstOrDefault();
             UpdateHostProfileState();
         }
+    }
+
+    public void LoadFromViewModel()
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        ProjectName.Text = ViewModel.DisplayName;
+        RepositoryRoot.Text = ViewModel.RepositoryRoot;
+        RemoteName.Text = ViewModel.RemoteName;
+        BranchName.Text = ViewModel.Branch;
+        ApplicationRoot.Text = ViewModel.ApplicationRoot;
+        PublicRoot.Text = ViewModel.PublicRoot;
+        ProtectedPaths.Text = ViewModel.ProtectedPathsText;
+        Strategy.SelectedIndex = ViewModel.Strategy == DeploymentStrategy.Laravel ? 1 : 0;
+
+        ServerProfile.SelectedItem = _hostProfiles.FirstOrDefault(profile => profile.Id == ViewModel.ServerProfileId)
+            ?? _hostProfiles.FirstOrDefault();
+        UpdateHostProfileState();
     }
 
     private void ServerProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -50,6 +73,13 @@ public sealed partial class DeploymentProjectEditor : UserControl
 
     private void ValidateProject_Click(object sender, RoutedEventArgs e)
     {
+        if (ViewModel is null)
+        {
+            ValidationInfo.Message = "Deployment project state is not available.";
+            ValidationInfo.IsOpen = true;
+            return;
+        }
+
         if (ServerProfile.SelectedItem is not ServerProfile selectedProfile)
         {
             ValidationInfo.Message = "Select a saved host profile before validating the project.";
@@ -57,22 +87,19 @@ public sealed partial class DeploymentProjectEditor : UserControl
             return;
         }
 
-        var viewModel = new DeploymentProjectEditorViewModel
-        {
-            DisplayName = ProjectName.Text,
-            RepositoryRoot = RepositoryRoot.Text,
-            RemoteName = RemoteName.Text,
-            Branch = BranchName.Text,
-            ServerProfileId = selectedProfile.Id,
-            ApplicationRoot = ApplicationRoot.Text,
-            PublicRoot = PublicRoot.Text,
-            Strategy = Strategy.SelectedIndex == 1 ? DeploymentStrategy.Laravel : DeploymentStrategy.FileSync,
-            ProtectedPathsText = ProtectedPaths.Text
-        };
+        ViewModel.DisplayName = ProjectName.Text;
+        ViewModel.RepositoryRoot = RepositoryRoot.Text;
+        ViewModel.RemoteName = RemoteName.Text;
+        ViewModel.Branch = BranchName.Text;
+        ViewModel.ServerProfileId = selectedProfile.Id;
+        ViewModel.ApplicationRoot = ApplicationRoot.Text;
+        ViewModel.PublicRoot = PublicRoot.Text;
+        ViewModel.Strategy = Strategy.SelectedIndex == 1 ? DeploymentStrategy.Laravel : DeploymentStrategy.FileSync;
+        ViewModel.ProtectedPathsText = ProtectedPaths.Text;
 
-        if (!viewModel.TryCreate(out var project) || project is null)
+        if (!ViewModel.TryCreate(out var project) || project is null)
         {
-            ValidationInfo.Message = viewModel.ValidationError ?? "Project configuration is invalid.";
+            ValidationInfo.Message = ViewModel.ValidationError ?? "Project configuration is invalid.";
             ValidationInfo.IsOpen = true;
             return;
         }
