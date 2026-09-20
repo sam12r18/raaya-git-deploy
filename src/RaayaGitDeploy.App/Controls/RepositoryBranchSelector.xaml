@@ -1,0 +1,57 @@
+<UserControl
+    x:Class="RaayaGitDeploy.App.Controls.RepositoryBranchSelector"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Border Style="{StaticResource M3SurfaceCardStyle}">
+        <StackPanel Spacing="{StaticResource M3Spacing12}">
+            <TextBlock Text="Repository source" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <TextBlock Text="Fetch the selected remote branch and compare its revision with the local checkout before planning a deployment."
+                       TextWrapping="Wrap"
+                       Opacity="0.72" />
+
+            <TextBox x:Name="RepositoryPathBox"
+                     Header="Repository path"
+                     PlaceholderText="C:\projects\my-app" />
+
+            <Grid ColumnSpacing="{StaticResource M3Spacing12}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="RemoteNameBox" Header="Remote" Text="origin" />
+                <TextBox x:Name="BranchNameBox" Grid.Column="1" Header="Branch" Text="main" />
+            </Grid>
+
+            <Grid ColumnSpacing="{StaticResource M3Spacing12}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="RefreshButton" Content="Fetch &amp; compare" Click="RefreshButton_Click" />
+                <ProgressRing x:Name="Progress" Grid.Column="1" Width="20" Height="20"
+                              HorizontalAlignment="Left" IsActive="False" Visibility="Collapsed" />
+            </Grid>
+
+            <InfoBar x:Name="StatusBar" IsOpen="False" IsClosable="False" />
+
+            <Grid x:Name="RevisionPanel" ColumnSpacing="{StaticResource M3Spacing12}" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Local revision" Opacity="0.72" />
+                    <TextBlock x:Name="LocalRevisionText" FontFamily="Consolas" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="Remote revision" Opacity="0.72" />
+                    <TextBlock x:Name="RemoteRevisionText" FontFamily="Consolas" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </Border>
+</UserControl>
