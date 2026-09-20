@@ -20,6 +20,8 @@ Target flow: Project → Repository/Branch → Host validation → Revision → 
 - Host validation reuses the existing remote transport abstraction; raw private key material is not accepted by the editor contract, only a credential/key reference.
 - Material-3-aligned spacing, shape, content-width and surface-card resources are centralized in `App.xaml`; components consume these shared tokens rather than defining local duplicates.
 - The application does not force a dark theme, leaving native WinUI Light/Dark/system behavior available while semantic ThemeResource brushes remain in use.
+- Provider-neutral Git remote tracking is implemented through `IGitRemoteTrackingService` / `GitRemoteTrackingService`: fetch uses `--prune` and option termination, and remote revision resolves a fully-qualified tracking ref.
+- `IGitRemoteTrackingService` is now registered in application DI next to the existing repository service, so the next Repository/Branch UI slice can consume it without constructing infrastructure directly.
 
 ### UI contract
 
@@ -34,11 +36,13 @@ The desktop stack is WinUI 3 / Windows App SDK. No parallel UI framework is adde
 - Credentials are not part of `DeploymentProject`; host/Git secret storage remains a separate concern.
 - Host profile stores only a key/credential reference; private key material must be resolved by the credential abstraction.
 - Project definitions reference saved host profiles rather than accepting arbitrary profile identifiers from free text.
+- Git remote tracking remains provider-neutral; the deploy core must not depend on GitHub-specific APIs.
 - Destructive operations and migrations require explicit policy/confirmation before implementation.
 
 ### Verification
 
 - Source-level saved Host Profile selector implementation completed.
+- Source-level remote-tracking DI registration completed.
 - `dotnet test` / WinUI build: **UNTESTED** in this run because the GitHub connector does not provide an executable repository workspace/.NET runtime.
 - UI visual/runtime QA: **UNTESTED** until built on Windows.
 
@@ -47,6 +51,7 @@ The desktop stack is WinUI 3 / Windows App SDK. No parallel UI framework is adde
 **MUST-FIX**
 - Integrate the selector with the parent workspace/store so saved profiles are loaded automatically rather than only accepted as a component input.
 - Distinguish connection-validated freshness from merely saved profile selection; a saved profile must not be interpreted as proof of a current successful connection test.
+- Build Repository/Branch selector states around the registered remote-tracking capability: idle/fetching/success/error and remote revision visibility.
 - Resolve `KeyReference` through the secure credential picker/store rather than expecting users to type implementation identifiers once the credential UI is available.
 - Validate selector focus order, InfoBar announcements and narrow-width layout in a real WinUI build.
 - Validate the centralized resources with a real WinUI build before expanding their use further.
@@ -58,4 +63,4 @@ The desktop stack is WinUI 3 / Windows App SDK. No parallel UI framework is adde
 
 ## Exact next step
 
-Wire `DeploymentProjectEditor.HostProfiles` to the existing server-profile store/workspace and preserve connection-validation freshness separately from saved state. Then add Repository/Branch selection backed by existing Git contracts. After that connect `DeploymentPlanner` to a Material-3-aligned `DryRunSummary` component.
+Build a presentation-level Repository/Branch state model over `IGitRepositoryService` + `IGitRemoteTrackingService`, then expose it through a reusable selector with Fetching/Success/Error and local/remote revision state. After that wire the selected source into `DeploymentProject` and connect `DeploymentPlanner` to a Material-3-aligned `DryRunSummary` component.
