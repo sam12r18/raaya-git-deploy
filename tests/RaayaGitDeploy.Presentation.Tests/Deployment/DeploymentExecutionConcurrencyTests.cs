@@ -8,7 +8,7 @@ public sealed class DeploymentExecutionConcurrencyTests
     [Fact]
     public async Task Execute_Rejects_Concurrent_Deployment_Without_Second_Remote_Mutation()
     {
-        var root = Path.Combine(Path.GetTempPath(), "raaya-workbench-concurrent-deploy");
+        var root = Path.Combine(Path.GetTempPath(), $"raaya-workbench-concurrent-deploy-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         var localPath = Path.Combine(root, "app.txt");
         await File.WriteAllTextAsync(localPath, "concurrency-test");
@@ -27,14 +27,22 @@ public sealed class DeploymentExecutionConcurrencyTests
             sut.RefreshDryRunPreview(root);
 
             var first = sut.ExecuteAsync(root, CancellationToken.None);
-            await transport.UploadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-
+            var uploadStarted = await Task.WhenAny(transport.UploadStarted.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+            Assert.Same(transport.UploadStarted.Task, uploadStarted);
             Assert.True(sut.IsExecuting);
-            var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+
+            InvalidOperationException? concurrentError = null;
+            try
             {
                 await sut.ExecuteAsync(root, CancellationToken.None);
-            });
-            Assert.Contains("already in progress", error.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (InvalidOperationException exception)
+            {
+                concurrentError = exception;
+            }
+
+            Assert.NotNull(concurrentError);
+            Assert.Contains("already in progress", concurrentError.Message);
             Assert.Equal(1, transport.UploadCount);
 
             transport.AllowUpload.TrySetResult(true);
@@ -45,14 +53,9 @@ public sealed class DeploymentExecutionConcurrencyTests
         }
         finally
         {
-            if (File.Exists(localPath))
-            {
-                File.Delete(localPath);
-            }
-
             if (Directory.Exists(root))
             {
-                Directory.Delete(root, recursive: true);
+                Directory.Delete(root, true);
             }
         }
     }
@@ -68,7 +71,11 @@ public sealed class DeploymentExecutionConcurrencyTests
     {
         private readonly List<DeploymentHistoryEntry> _entries = [];
         public Task<IReadOnlyList<DeploymentHistoryEntry>> LoadAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<DeploymentHistoryEntry>>(_entries);
-        public Task AppendAsync(DeploymentHistoryEntry entry, CancellationToken cancellationToken) { _entries.Add(entry); return Task.CompletedTask; }
+        public Task AppendAsync(DeploymentHistoryEntry entry, CancellationToken cancellationToken)
+        {
+            _entries.Add(entry);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class BlockingTransport : IRemoteTransport
@@ -80,12 +87,14 @@ public sealed class DeploymentExecutionConcurrencyTests
 
         public Task TestConnectionAsync(ServerProfile profile, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<IReadOnlyList<string>> ListAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<string>>([]);
+
         public async Task UploadAsync(ServerProfile profile, string localPath, string remotePath, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _uploadCount);
             UploadStarted.TrySetResult(true);
             await AllowUpload.Task.WaitAsync(cancellationToken);
         }
+
         public Task DeleteAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
