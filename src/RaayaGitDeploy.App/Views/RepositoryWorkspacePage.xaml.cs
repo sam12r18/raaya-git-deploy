@@ -30,6 +30,7 @@ public sealed partial class RepositoryWorkspacePage : Page
         _openCoordinator = openCoordinator ?? throw new ArgumentNullException(nameof(openCoordinator));
         InitializeComponent();
         DryRunSummaryControl.ViewModel = _deployment.DryRunSummary;
+        HostProfileCardControl.ViewModel = _deployment.HostProfileEditor;
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         WorkbenchNavigation.SelectedItem = WorkbenchNavigation.MenuItems[0];
         _terminalRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
@@ -70,15 +71,38 @@ public sealed partial class RepositoryWorkspacePage : Page
     }
 
     private async Task LoadDeploymentAsync() { try { await _deployment.LoadServersAsync(CancellationToken.None); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
-    private void RefreshDeploymentSurface() { DeployQueueList.ItemsSource = null; DeployQueueList.ItemsSource = _deployment.Queue.Items; ServersList.ItemsSource = null; ServersList.ItemsSource = _deployment.Servers.Profiles; ServersList.SelectedItem = _deployment.Servers.SelectedProfile; DryRunSummaryControl.Render(); }
+    private void RefreshDeploymentSurface()
+    {
+        DeployQueueList.ItemsSource = null; DeployQueueList.ItemsSource = _deployment.Queue.Items;
+        ServersList.ItemsSource = null; ServersList.ItemsSource = _deployment.Servers.Profiles;
+        ServersList.SelectedItem = _deployment.Servers.SelectedProfile;
+        if (_deployment.Servers.SelectedProfile is { } selected) HostProfileCardControl.LoadProfile(selected); else HostProfileCardControl.ClearProfile();
+        DryRunSummaryControl.Render();
+    }
     private void DeployAddSelectedChange_Click(object sender, RoutedEventArgs e) { try { if (ChangesList.SelectedItem is not ChangeItemViewModel change) throw new InvalidOperationException("Select a changed file first."); if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository first."); _deployment.Queue.AddGitSelection(Path.Combine(ViewModel.RepositoryPath, change.Path)); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
     private void DeployClear_Click(object sender, RoutedEventArgs e) { _deployment.Queue.Clear(); RefreshDeploymentSurface(); }
     private void DryRun_Click(object sender, RoutedEventArgs e) { try { if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository first."); _deployment.RefreshDryRunPreview(ViewModel.RepositoryPath); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
-    private void ServersList_SelectionChanged(object sender, SelectionChangedEventArgs e) { _deployment.Servers.SelectedProfile = ServersList.SelectedItem as ServerProfile; if (_deployment.Servers.SelectedProfile is { } p) { ServerName.Text=p.DisplayName; ServerHost.Text=p.Host; ServerPort.Text=p.Port.ToString(); ServerUsername.Text=p.Username; ServerRemoteRoot.Text=p.RemoteRoot; ServerKeyReference.Text=p.KeyReference; } }
-    private void ServerNew_Click(object sender, RoutedEventArgs e) { _deployment.Servers.SelectedProfile=null; ServersList.SelectedItem=null; ServerName.Text=ServerHost.Text=ServerUsername.Text=ServerRemoteRoot.Text=ServerKeyReference.Text=string.Empty; ServerPort.Text="22"; }
-    private async void ServerSave_Click(object sender, RoutedEventArgs e) { try { if (!int.TryParse(ServerPort.Text, out var port)) throw new InvalidOperationException("Port must be a number."); var profile=new ServerProfile(_deployment.Servers.SelectedProfile?.Id ?? Guid.NewGuid().ToString("N"), ServerName.Text.Trim(), ServerHost.Text.Trim(), port, ServerUsername.Text.Trim(), ServerRemoteRoot.Text.Trim(), ServerAuthenticationMode.SshKey, ServerKeyReference.Text.Trim()); await _deployment.Servers.SaveAsync(profile, CancellationToken.None); RefreshDeploymentSurface(); } catch(Exception ex){ ShowError(ex.Message); } }
-    private async void ServerDelete_Click(object sender, RoutedEventArgs e) { try { await _deployment.Servers.DeleteSelectedAsync(CancellationToken.None); ServerNew_Click(sender,e); RefreshDeploymentSurface(); } catch(Exception ex){ ShowError(ex.Message); } }
-    private async void ServerTest_Click(object sender, RoutedEventArgs e) { try { await _deployment.Servers.TestSelectedConnectionAsync(CancellationToken.None); } catch(Exception ex){ ShowError(ex.Message); } }
+    private void ServersList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _deployment.Servers.SelectedProfile = ServersList.SelectedItem as ServerProfile;
+        if (_deployment.Servers.SelectedProfile is { } profile) HostProfileCardControl.LoadProfile(profile); else HostProfileCardControl.ClearProfile();
+    }
+    private void ServerNew_Click(object sender, RoutedEventArgs e)
+    {
+        _deployment.Servers.SelectedProfile = null;
+        ServersList.SelectedItem = null;
+        HostProfileCardControl.ClearProfile();
+    }
+    private async void ServerDelete_Click(object sender, RoutedEventArgs e)
+    {
+        try { await _deployment.Servers.DeleteSelectedAsync(CancellationToken.None); HostProfileCardControl.ClearProfile(); RefreshDeploymentSurface(); }
+        catch (Exception ex) { ShowError(ex.Message); }
+    }
+    private void HostProfileCard_ProfileValidated(object? sender, ServerProfile profile)
+    {
+        _deployment.Servers.SelectedProfile = profile;
+        RefreshDeploymentSurface();
+    }
 
     private async Task LoadCommandsAsync() { try { _commands.SetRepository(ViewModel.RepositoryPath); await _commands.LoadAsync(CancellationToken.None); RefreshCommandsSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
     private void RefreshCommandsSurface() { CommandsList.ItemsSource = null; CommandsList.ItemsSource = _commands.Commands; CommandsList.SelectedItem = _commands.SelectedCommand; }
