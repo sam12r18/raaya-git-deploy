@@ -8,10 +8,11 @@ public sealed class DeploymentExecutionConcurrencyTests
     [Fact]
     public async Task Execute_Rejects_Concurrent_Deployment_Without_Second_Remote_Mutation()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var root = Path.Combine(Path.GetTempPath(), $"raaya-workbench-concurrent-deploy-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         var localPath = Path.Combine(root, "app.txt");
-        await File.WriteAllTextAsync(localPath, "concurrency-test");
+        await File.WriteAllTextAsync(localPath, "concurrency-test", cancellationToken);
 
         try
         {
@@ -22,19 +23,19 @@ public sealed class DeploymentExecutionConcurrencyTests
             var planner = new DeploymentPlanner();
             var sut = new DeploymentWorkspaceViewModel(queue, servers, new DeploymentDryRunViewModel(planner), planner, new DeploymentExecutor(transport), new FakeHistoryStore());
 
-            await sut.LoadServersAsync(CancellationToken.None);
+            await sut.LoadServersAsync(cancellationToken);
             queue.AddFile(localPath);
             sut.RefreshDryRunPreview(root);
 
-            var first = sut.ExecuteAsync(root, CancellationToken.None);
-            var uploadStarted = await Task.WhenAny(transport.UploadStarted.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+            var first = sut.ExecuteAsync(root, cancellationToken);
+            var uploadStarted = await Task.WhenAny(transport.UploadStarted.Task, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken));
             Assert.Same(transport.UploadStarted.Task, uploadStarted);
             Assert.True(sut.IsExecuting);
 
             InvalidOperationException? concurrentError = null;
             try
             {
-                await sut.ExecuteAsync(root, CancellationToken.None);
+                await sut.ExecuteAsync(root, cancellationToken);
             }
             catch (InvalidOperationException exception)
             {
