@@ -8,6 +8,7 @@ public sealed class DeploymentWorkspaceViewModel
     private readonly DeploymentPlanner _planner;
     private readonly DeploymentExecutor _executor;
     private readonly IDeploymentHistoryStore _historyStore;
+    private ServerProfile? _previewProfile;
 
     public DeploymentWorkspaceViewModel(
         DeploymentQueueViewModel queue,
@@ -37,18 +38,28 @@ public sealed class DeploymentWorkspaceViewModel
     public DeploymentPlan CreateDryRunPreview(string repositoryRoot) =>
         _dryRun.Preview(repositoryRoot, Servers.SelectedProfile, Queue.Items);
 
-    public void RefreshDryRunPreview(string repositoryRoot) => PreviewPlan = CreateDryRunPreview(repositoryRoot);
+    public void RefreshDryRunPreview(string repositoryRoot)
+    {
+        PreviewPlan = CreateDryRunPreview(repositoryRoot);
+        _previewProfile = Servers.SelectedProfile;
+    }
 
     public async Task<DeploymentResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken)
     {
         var profile = Servers.SelectedProfile ?? throw new InvalidOperationException("Select a server profile before deployment.");
-        if (PreviewPlan is null) throw new InvalidOperationException("Run Dry Run before deployment.");
+        var preview = PreviewPlan ?? throw new InvalidOperationException("Run Dry Run before deployment.");
 
         var plan = _planner.Plan(
             repositoryRoot,
             profile.RemoteRoot,
             Queue.Items.Select(item => item.LocalPath),
             dryRun: false);
+
+        if (_previewProfile is null || profile != _previewProfile || !preview.Operations.SequenceEqual(plan.Operations))
+        {
+            throw new InvalidOperationException("Deployment inputs changed after Dry Run. Run Dry Run again and review the updated plan before deploying.");
+        }
+
         var startedAt = DateTimeOffset.UtcNow;
         var result = await _executor.ExecuteAsync(profile, plan, cancellationToken);
         LastResult = result;

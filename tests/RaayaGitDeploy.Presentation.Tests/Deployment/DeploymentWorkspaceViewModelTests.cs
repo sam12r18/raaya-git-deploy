@@ -60,6 +60,49 @@ public sealed class DeploymentWorkspaceViewModelTests
         Assert.Throws<InvalidOperationException>(() => sut.CreateDryRunPreview(Path.GetTempPath()));
     }
 
+    [Fact]
+    public async Task Execute_Rejects_Queue_Changes_After_Dry_Run()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "raaya-workbench-stale-queue");
+        var profile = new ServerProfile("prod", "Production", "example.test", 22, "deploy", "/var/www/app", ServerAuthenticationMode.SshKey, "key:prod");
+        var queue = new DeploymentQueueViewModel();
+        var transport = new FakeTransport();
+        var sut = CreateSut(queue, new ServersViewModel(new FakeStore(profile), transport), transport);
+
+        await sut.LoadServersAsync(CancellationToken.None);
+        queue.AddFile(Path.Combine(root, "first.txt"));
+        sut.RefreshDryRunPreview(root);
+        queue.AddFile(Path.Combine(root, "second.txt"));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ExecuteAsync(root, CancellationToken.None));
+
+        Assert.Contains("Run Dry Run again", error.Message, StringComparison.Ordinal);
+        Assert.Empty(transport.Uploads);
+    }
+
+    [Fact]
+    public async Task Execute_Rejects_Server_Changes_After_Dry_Run()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "raaya-workbench-stale-server");
+        var production = new ServerProfile("prod", "Production", "prod.example.test", 22, "deploy", "/var/www/app", ServerAuthenticationMode.SshKey, "key:prod");
+        var staging = new ServerProfile("stage", "Staging", "stage.example.test", 22, "deploy", "/var/www/app", ServerAuthenticationMode.SshKey, "key:stage");
+        var queue = new DeploymentQueueViewModel();
+        var transport = new FakeTransport();
+        var servers = new ServersViewModel(new FakeStore(production, staging), transport);
+        var sut = CreateSut(queue, servers, transport);
+
+        await sut.LoadServersAsync(CancellationToken.None);
+        servers.SelectedProfile = production;
+        queue.AddFile(Path.Combine(root, "app.txt"));
+        sut.RefreshDryRunPreview(root);
+        servers.SelectedProfile = staging;
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ExecuteAsync(root, CancellationToken.None));
+
+        Assert.Contains("Run Dry Run again", error.Message, StringComparison.Ordinal);
+        Assert.Empty(transport.Uploads);
+    }
+
     private static DeploymentWorkspaceViewModel CreateSut(
         DeploymentQueueViewModel queue,
         ServersViewModel servers,
@@ -92,9 +135,10 @@ public sealed class DeploymentWorkspaceViewModelTests
 
     private sealed class FakeTransport : IRemoteTransport
     {
+        public List<(string LocalPath, string RemotePath)> Uploads { get; } = [];
         public Task TestConnectionAsync(ServerProfile profile, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<IReadOnlyList<string>> ListAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<string>>([]);
-        public Task UploadAsync(ServerProfile profile, string localPath, string remotePath, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task UploadAsync(ServerProfile profile, string localPath, string remotePath, CancellationToken cancellationToken) { Uploads.Add((localPath, remotePath)); return Task.CompletedTask; }
         public Task DeleteAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
