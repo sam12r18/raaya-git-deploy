@@ -2,6 +2,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using RaayaGitDeploy.Core.Deployment;
 using RaayaGitDeploy.Presentation.Deployment;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
 
 namespace RaayaGitDeploy.App.Controls;
 
@@ -27,6 +29,7 @@ public sealed partial class HostProfileCard : UserControl
         Username.Text = profile.Username;
         RemoteRoot.Text = profile.RemoteRoot;
         KeyReference.Text = profile.KeyReference;
+        UpdateCredentialState();
         ConnectionInfo.IsOpen = false;
     }
 
@@ -39,7 +42,55 @@ public sealed partial class HostProfileCard : UserControl
         Username.Text = string.Empty;
         RemoteRoot.Text = string.Empty;
         KeyReference.Text = string.Empty;
+        UpdateCredentialState();
         ConnectionInfo.IsOpen = false;
+    }
+
+    private async void ImportPrivateKey_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is null)
+        {
+            ShowStatus(ConnectionValidationState.Error, "Host credential service is not available.");
+            return;
+        }
+
+        var picker = new FileOpenPicker();
+        picker.FileTypeFilter.Add("*");
+
+        var window = App.MainWindow;
+        if (window is null)
+        {
+            ShowStatus(ConnectionValidationState.Error, "Unable to open the private-key picker.");
+            return;
+        }
+
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
+        var file = await picker.PickSingleFileAsync();
+        if (file is null)
+        {
+            return;
+        }
+
+        SetBusy(true);
+        try
+        {
+            var privateKey = await Windows.Storage.FileIO.ReadTextAsync(file);
+            var referenceName = string.IsNullOrWhiteSpace(DisplayName.Text)
+                ? Path.GetFileNameWithoutExtension(file.Name)
+                : DisplayName.Text;
+            var reference = await ViewModel.ImportPrivateKeyAsync(privateKey, referenceName, CancellationToken.None);
+            KeyReference.Text = reference.ToString();
+            UpdateCredentialState();
+            ShowStatus(ConnectionValidationState.Idle, "Private key imported into protected local storage.");
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            ShowStatus(ConnectionValidationState.Error, ex.Message);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
     }
 
     private async void TestConnection_Click(object sender, RoutedEventArgs e)
@@ -81,15 +132,22 @@ public sealed partial class HostProfileCard : UserControl
         }
     }
 
+    private void UpdateCredentialState()
+    {
+        var hasCredential = !string.IsNullOrWhiteSpace(KeyReference.Text);
+        CredentialStateText.Text = hasCredential ? "Protected key ready" : "No protected key imported";
+        KeyReference.Visibility = hasCredential ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void SetBusy(bool isBusy)
     {
         TestConnectionButton.IsEnabled = !isBusy;
+        ImportPrivateKeyButton.IsEnabled = !isBusy;
         DisplayName.IsEnabled = !isBusy;
         Host.IsEnabled = !isBusy;
         Port.IsEnabled = !isBusy;
         Username.IsEnabled = !isBusy;
         RemoteRoot.IsEnabled = !isBusy;
-        KeyReference.IsEnabled = !isBusy;
         ConnectionProgress.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
     }
 
