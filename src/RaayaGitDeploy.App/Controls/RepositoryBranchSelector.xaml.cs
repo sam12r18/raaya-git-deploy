@@ -11,9 +11,24 @@ public sealed partial class RepositoryBranchSelector : UserControl
         InitializeComponent();
     }
 
+    public event EventHandler? RefreshRequested;
+
     public RepositoryBranchSelectorViewModel? ViewModel { get; set; }
 
-    private async void RefreshButton_Click(object sender, RoutedEventArgs e)
+    public void LoadFromViewModel()
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        RepositoryPathBox.Text = ViewModel.RepositoryPath;
+        RemoteNameBox.Text = ViewModel.RemoteName;
+        BranchNameBox.Text = ViewModel.BranchName;
+        RenderState();
+    }
+
+    public async Task RefreshAsync(Func<CancellationToken, Task>? refresh = null)
     {
         if (ViewModel is null)
         {
@@ -31,7 +46,15 @@ public sealed partial class RepositoryBranchSelector : UserControl
 
         try
         {
-            await ViewModel.RefreshAsync(CancellationToken.None);
+            if (refresh is null)
+            {
+                await ViewModel.RefreshAsync(CancellationToken.None);
+            }
+            else
+            {
+                await refresh(CancellationToken.None);
+            }
+
             RenderState();
         }
         catch (OperationCanceledException)
@@ -45,6 +68,17 @@ public sealed partial class RepositoryBranchSelector : UserControl
         {
             SetBusy(false);
         }
+    }
+
+    private async void RefreshButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (RefreshRequested is not null)
+        {
+            RefreshRequested.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        await RefreshAsync();
     }
 
     private void RenderState()
