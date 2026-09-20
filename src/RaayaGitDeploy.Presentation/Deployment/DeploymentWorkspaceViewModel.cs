@@ -9,16 +9,20 @@ public sealed class DeploymentWorkspaceViewModel
     public DeploymentWorkspaceViewModel(
         DeploymentQueueViewModel queue,
         ServersViewModel servers,
-        DeploymentDryRunViewModel dryRun)
+        DeploymentDryRunViewModel dryRun,
+        DryRunSummaryViewModel dryRunSummary)
     {
         Queue = queue ?? throw new ArgumentNullException(nameof(queue));
         Servers = servers ?? throw new ArgumentNullException(nameof(servers));
         _dryRun = dryRun ?? throw new ArgumentNullException(nameof(dryRun));
+        DryRunSummary = dryRunSummary ?? throw new ArgumentNullException(nameof(dryRunSummary));
     }
 
     public DeploymentQueueViewModel Queue { get; }
 
     public ServersViewModel Servers { get; }
+
+    public DryRunSummaryViewModel DryRunSummary { get; }
 
     public DeploymentPlan? PreviewPlan { get; private set; }
 
@@ -31,5 +35,6 @@ public sealed class DeploymentWorkspaceViewModel
     public void RefreshDryRunPreview(string repositoryRoot)
     {
         PreviewPlan = CreateDryRunPreview(repositoryRoot);
+        DryRunSummary.Load(PreviewPlan);
     }
 }
