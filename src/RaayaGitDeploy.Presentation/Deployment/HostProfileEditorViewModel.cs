@@ -13,10 +13,12 @@ public enum ConnectionValidationState
 public sealed class HostProfileEditorViewModel
 {
     private readonly ServersViewModel _servers;
+    private readonly ISecretStore _secretStore;
 
-    public HostProfileEditorViewModel(ServersViewModel servers)
+    public HostProfileEditorViewModel(ServersViewModel servers, ISecretStore secretStore)
     {
         _servers = servers ?? throw new ArgumentNullException(nameof(servers));
+        _secretStore = secretStore ?? throw new ArgumentNullException(nameof(secretStore));
     }
 
     public string DisplayName { get; set; } = string.Empty;
@@ -28,6 +30,32 @@ public sealed class HostProfileEditorViewModel
     public ConnectionValidationState ConnectionState { get; private set; } = ConnectionValidationState.Idle;
     public string? StatusMessage { get; private set; }
     public bool IsBusy => ConnectionState == ConnectionValidationState.Validating;
+
+    public async Task<SecretReference> ImportPrivateKeyAsync(
+        string privateKey,
+        string? credentialId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(privateKey))
+            throw new ArgumentException("SSH private key content is required.", nameof(privateKey));
+
+        var trimmed = privateKey.Trim();
+        if (!trimmed.StartsWith("-----BEGIN ", StringComparison.Ordinal) ||
+            !trimmed.Contains("PRIVATE KEY-----", StringComparison.Ordinal) ||
+            !trimmed.Contains("-----END ", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("The selected credential does not look like a PEM/OpenSSH private key.", nameof(privateKey));
+        }
+
+        var reference = SecretReference.Create(
+            "host",
+            string.IsNullOrWhiteSpace(credentialId) ? Guid.NewGuid().ToString("N") : credentialId);
+
+        await _secretStore.SetAsync(reference, privateKey, cancellationToken);
+        KeyReference = reference.ToString();
+        StatusMessage = "SSH credential imported into the protected credential store.";
+        return reference;
+    }
 
     public ServerProfile CreateProfile(string? id = null)
     {
