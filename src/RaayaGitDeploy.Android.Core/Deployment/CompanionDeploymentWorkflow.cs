@@ -18,6 +18,7 @@ public sealed class CompanionDeploymentWorkflow
     public IReadOnlyList<CompanionRepository> Repositories { get; private set; } = [];
     public IReadOnlyList<CompanionDeploymentProfile> Profiles { get; private set; } = [];
     public CompanionDeploymentPreview? Preview { get; private set; }
+    public CompanionDeploymentRun? CurrentRun { get; private set; }
 
     public async Task LoadRepositoriesAsync(CancellationToken cancellationToken)
     {
@@ -26,6 +27,7 @@ public sealed class CompanionDeploymentWorkflow
         SelectedProfile = null;
         Profiles = [];
         Preview = null;
+        CurrentRun = null;
     }
 
     public async Task SelectRepositoryAsync(string repositoryId, CancellationToken cancellationToken)
@@ -36,6 +38,7 @@ public sealed class CompanionDeploymentWorkflow
         Profiles = await _api.GetProfilesAsync(SelectedRepository.Id, cancellationToken).ConfigureAwait(false);
         SelectedProfile = null;
         Preview = null;
+        CurrentRun = null;
     }
 
     public void SelectProfile(string profileId)
@@ -43,6 +46,7 @@ public sealed class CompanionDeploymentWorkflow
         SelectedProfile = Profiles.FirstOrDefault(item => item.Id == profileId)
             ?? throw new InvalidOperationException("Select an authorized deployment profile returned by the companion agent.");
         Preview = null;
+        CurrentRun = null;
     }
 
     public async Task<CompanionDeploymentPreview> DryRunAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken)
@@ -55,6 +59,7 @@ public sealed class CompanionDeploymentWorkflow
         Preview = await _api.DryRunAsync(
             new CompanionDeploymentRequest(repository.Id, profile.Id, paths, DryRun: true),
             cancellationToken).ConfigureAwait(false);
+        CurrentRun = null;
         return Preview;
     }
 
@@ -65,6 +70,14 @@ public sealed class CompanionDeploymentWorkflow
         if (profile.RequiresConfirmation && !confirmed)
             throw new InvalidOperationException("This deployment profile requires explicit confirmation.");
 
-        return await _api.StartDeploymentAsync(preview.Id, confirmed, cancellationToken).ConfigureAwait(false);
+        CurrentRun = await _api.StartDeploymentAsync(preview.Id, confirmed, cancellationToken).ConfigureAwait(false);
+        return CurrentRun;
+    }
+
+    public async Task<CompanionDeploymentRun> RefreshDeploymentAsync(CancellationToken cancellationToken)
+    {
+        var run = CurrentRun ?? throw new InvalidOperationException("Start a deployment before requesting progress.");
+        CurrentRun = await _api.GetDeploymentAsync(run.Id, cancellationToken).ConfigureAwait(false);
+        return CurrentRun;
     }
 }
