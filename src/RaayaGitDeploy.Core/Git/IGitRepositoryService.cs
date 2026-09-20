@@ -10,6 +10,17 @@ public interface IGitRepositoryService
         string path,
         CancellationToken cancellationToken);
 
+    Task FetchRemoteAsync(
+        string repositoryPath,
+        string remoteName,
+        CancellationToken cancellationToken);
+
+    Task<string> GetRemoteRevisionAsync(
+        string repositoryPath,
+        string remoteName,
+        string branchName,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<GitCommitInfo>> GetRecentCommitsAsync(
         string repositoryPath,
         int limit,
