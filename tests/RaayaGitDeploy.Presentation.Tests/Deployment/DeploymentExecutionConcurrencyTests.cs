@@ -25,11 +25,14 @@ public sealed class DeploymentExecutionConcurrencyTests
         await transport.UploadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.True(sut.IsExecuting);
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ExecuteAsync(root, CancellationToken.None));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await sut.ExecuteAsync(root, CancellationToken.None);
+        });
         Assert.Contains("already in progress", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, transport.UploadCount);
 
-        transport.AllowUpload.TrySetResult();
+        transport.AllowUpload.TrySetResult(true);
         await first;
 
         Assert.False(sut.IsExecuting);
@@ -53,8 +56,8 @@ public sealed class DeploymentExecutionConcurrencyTests
     private sealed class BlockingTransport : IRemoteTransport
     {
         private int _uploadCount;
-        public TaskCompletionSource UploadStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource AllowUpload { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> UploadStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> AllowUpload { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int UploadCount => Volatile.Read(ref _uploadCount);
 
         public Task TestConnectionAsync(ServerProfile profile, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -62,7 +65,7 @@ public sealed class DeploymentExecutionConcurrencyTests
         public async Task UploadAsync(ServerProfile profile, string localPath, string remotePath, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _uploadCount);
-            UploadStarted.TrySetResult();
+            UploadStarted.TrySetResult(true);
             await AllowUpload.Task.WaitAsync(cancellationToken);
         }
         public Task DeleteAsync(ServerProfile profile, string remotePath, CancellationToken cancellationToken) => Task.CompletedTask;
