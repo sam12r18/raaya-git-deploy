@@ -34,6 +34,7 @@ public static class ServiceRegistration
 
         var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RaayaGitDeploy");
         services.AddSingleton<IServerProfileStore>(_ => new JsonServerProfileStore(Path.Combine(appData, "servers.json")));
+        services.AddSingleton<ISecretStore>(_ => new WindowsDpapiSecretStore(Path.Combine(appData, "secrets")));
         services.AddSingleton<IHostKeyVerifier>(_ => new TofuHostKeyVerifier(Path.Combine(appData, "known-hosts")));
         services.AddTransient<ISftpClientAdapter>(_ => throw new InvalidOperationException("Resolve SFTP adapters through the profile factory."));
         services.AddSingleton<IRemoteTransport>(provider => new SftpRemoteTransport(
