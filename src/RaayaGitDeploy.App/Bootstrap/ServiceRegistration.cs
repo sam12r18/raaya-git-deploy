@@ -43,6 +43,8 @@ public static class ServiceRegistration
         services.AddTransient<DeploymentQueueViewModel>();
         services.AddTransient<ServersViewModel>();
         services.AddTransient<HostProfileEditorViewModel>();
+        services.AddTransient<RepositoryBranchSelectorViewModel>();
+        services.AddTransient<DeploymentProjectEditorViewModel>();
         services.AddTransient<DeploymentPlanner>();
         services.AddTransient<DeploymentDryRunViewModel>();
         services.AddTransient<DryRunSummaryViewModel>();
