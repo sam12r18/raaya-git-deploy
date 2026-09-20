@@ -9,6 +9,7 @@ public sealed class DeploymentWorkspaceViewModel
     private readonly DeploymentExecutor _executor;
     private readonly IDeploymentHistoryStore _historyStore;
     private ServerProfile? _previewProfile;
+    private int _executionInProgress;
 
     public DeploymentWorkspaceViewModel(
         DeploymentQueueViewModel queue,
@@ -31,6 +32,7 @@ public sealed class DeploymentWorkspaceViewModel
     public DeploymentPlan? PreviewPlan { get; private set; }
     public DeploymentResult? LastResult { get; private set; }
     public IReadOnlyList<DeploymentHistoryEntry> History { get; private set; } = Array.Empty<DeploymentHistoryEntry>();
+    public bool IsExecuting => Volatile.Read(ref _executionInProgress) != 0;
 
     public Task LoadServersAsync(CancellationToken cancellationToken) => Servers.LoadAsync(cancellationToken);
     public async Task LoadHistoryAsync(CancellationToken cancellationToken) => History = await _historyStore.LoadAsync(cancellationToken);
@@ -46,28 +48,40 @@ public sealed class DeploymentWorkspaceViewModel
 
     public async Task<DeploymentResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken)
     {
-        var profile = Servers.SelectedProfile ?? throw new InvalidOperationException("Select a server profile before deployment.");
-        var preview = PreviewPlan ?? throw new InvalidOperationException("Run Dry Run before deployment.");
-
-        var plan = _planner.Plan(
-            repositoryRoot,
-            profile.RemoteRoot,
-            Queue.Items.Select(item => item.LocalPath),
-            dryRun: false);
-
-        if (_previewProfile is null || profile != _previewProfile || !preview.Operations.SequenceEqual(plan.Operations))
+        if (Interlocked.CompareExchange(ref _executionInProgress, 1, 0) != 0)
         {
-            throw new InvalidOperationException("Deployment inputs changed after Dry Run. Run Dry Run again and review the updated plan before deploying.");
+            throw new InvalidOperationException("A deployment is already in progress.");
         }
 
-        var startedAt = DateTimeOffset.UtcNow;
-        var result = await _executor.ExecuteAsync(profile, plan, cancellationToken);
-        LastResult = result;
+        try
+        {
+            var profile = Servers.SelectedProfile ?? throw new InvalidOperationException("Select a server profile before deployment.");
+            var preview = PreviewPlan ?? throw new InvalidOperationException("Run Dry Run before deployment.");
 
-        var entry = new DeploymentHistoryEntry(
-            Guid.NewGuid().ToString("N"), startedAt, profile.Id, profile.DisplayName, result.Succeeded, result.Items);
-        await _historyStore.AppendAsync(entry, cancellationToken);
-        History = await _historyStore.LoadAsync(cancellationToken);
-        return result;
+            var plan = _planner.Plan(
+                repositoryRoot,
+                profile.RemoteRoot,
+                Queue.Items.Select(item => item.LocalPath),
+                dryRun: false);
+
+            if (_previewProfile is null || profile != _previewProfile || !preview.Operations.SequenceEqual(plan.Operations))
+            {
+                throw new InvalidOperationException("Deployment inputs changed after Dry Run. Run Dry Run again and review the updated plan before deploying.");
+            }
+
+            var startedAt = DateTimeOffset.UtcNow;
+            var result = await _executor.ExecuteAsync(profile, plan, cancellationToken);
+            LastResult = result;
+
+            var entry = new DeploymentHistoryEntry(
+                Guid.NewGuid().ToString("N"), startedAt, profile.Id, profile.DisplayName, result.Succeeded, result.Items);
+            await _historyStore.AppendAsync(entry, cancellationToken);
+            History = await _historyStore.LoadAsync(cancellationToken);
+            return result;
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _executionInProgress, 0);
+        }
     }
 }
