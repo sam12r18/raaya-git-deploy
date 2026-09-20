@@ -33,32 +33,47 @@ public sealed class DryRunSummaryViewModel
 
         try
         {
-            var plan = _planner.Plan(project, localPaths, dryRun: true);
-            Operations = plan.Operations
-                .Select(operation => new DryRunOperationItem(
-                    operation.Kind,
-                    operation.LocalPath,
-                    operation.RemotePath,
-                    operation.Kind == DeploymentOperationKind.Delete,
-                    operation.Kind == DeploymentOperationKind.Skip))
-                .ToArray();
-
-            UploadCount = Operations.Count(item => item.Kind == DeploymentOperationKind.Upload);
-            DeleteCount = Operations.Count(item => item.Kind == DeploymentOperationKind.Delete);
-            ProtectedSkipCount = Operations.Count(item => item.IsProtected);
-            ErrorMessage = null;
-            IsReady = true;
+            Load(_planner.Plan(project, localPaths, dryRun: true));
             return true;
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            Operations = Array.Empty<DryRunOperationItem>();
-            UploadCount = 0;
-            DeleteCount = 0;
-            ProtectedSkipCount = 0;
-            IsReady = false;
-            ErrorMessage = exception.Message;
+            Reset(exception.Message);
             return false;
         }
+    }
+
+    public void Load(DeploymentPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (!plan.IsDryRun)
+        {
+            throw new InvalidOperationException("Dry-run summary only accepts non-executing deployment plans.");
+        }
+
+        Operations = plan.Operations
+            .Select(operation => new DryRunOperationItem(
+                operation.Kind,
+                operation.LocalPath,
+                operation.RemotePath,
+                operation.Kind == DeploymentOperationKind.Delete,
+                operation.Kind == DeploymentOperationKind.Skip))
+            .ToArray();
+
+        UploadCount = Operations.Count(item => item.Kind == DeploymentOperationKind.Upload);
+        DeleteCount = Operations.Count(item => item.Kind == DeploymentOperationKind.Delete);
+        ProtectedSkipCount = Operations.Count(item => item.IsProtected);
+        ErrorMessage = null;
+        IsReady = true;
+    }
+
+    private void Reset(string errorMessage)
+    {
+        Operations = Array.Empty<DryRunOperationItem>();
+        UploadCount = 0;
+        DeleteCount = 0;
+        ProtectedSkipCount = 0;
+        IsReady = false;
+        ErrorMessage = errorMessage;
     }
 }
