@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using RaayaGitDeploy.Core.Deployment;
 using RaayaGitDeploy.Presentation.Workspace;
 
@@ -16,13 +17,26 @@ public sealed partial class RepositoryWorkspacePage
             _deployment.PrepareRetry(entry);
             RefreshDeploymentSurface();
             HistoryRecoveryText.Text = $"Retry prepared for {_deployment.Queue.Items.Count} failed/blocked upload(s). Review the server and run a new Dry Run before deploying.";
-            ViewModel.SelectedSection = WorkspaceSection.DeployQueue;
-            WorkbenchNavigation.SelectedItem = WorkbenchNavigation.MenuItems[4];
-            UpdateSectionSurface();
+            NavigateToSection(WorkspaceSection.DeployQueue);
         }
         catch (Exception ex)
         {
             ShowError(ex.Message);
         }
+    }
+
+    private void NavigateToSection(WorkspaceSection section)
+    {
+        var tag = section.ToString();
+        var item = WorkbenchNavigation.MenuItems
+            .OfType<NavigationViewItem>()
+            .FirstOrDefault(candidate => string.Equals(candidate.Tag?.ToString(), tag, StringComparison.Ordinal));
+
+        if (item is null)
+            throw new InvalidOperationException($"Navigation item for {section} is not available.");
+
+        ViewModel.SelectedSection = section;
+        WorkbenchNavigation.SelectedItem = item;
+        UpdateSectionSurface();
     }
 }
