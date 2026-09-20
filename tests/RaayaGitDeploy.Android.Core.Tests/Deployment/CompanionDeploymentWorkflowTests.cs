@@ -38,9 +38,28 @@ public sealed class CompanionDeploymentWorkflowTests
         Assert.Equal(0, api.StartCalls);
     }
 
+    [Fact]
+    public async Task RefreshDeployment_UsesAgentRunIdAndUpdatesCurrentRun()
+    {
+        var api = new FakeApi();
+        var workflow = new CompanionDeploymentWorkflow(api);
+        await workflow.LoadRepositoriesAsync(TestContext.Current.CancellationToken);
+        await workflow.SelectRepositoryAsync("repo-1", TestContext.Current.CancellationToken);
+        workflow.SelectProfile("prod");
+        await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
+        await workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken);
+
+        var refreshed = await workflow.RefreshDeploymentAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("run-1", api.LastDeploymentId);
+        Assert.Equal("succeeded", refreshed.Status);
+        Assert.Same(refreshed, workflow.CurrentRun);
+    }
+
     private sealed class FakeApi : ICompanionDeploymentApi
     {
         public CompanionDeploymentRequest? LastRequest { get; private set; }
+        public string? LastDeploymentId { get; private set; }
         public int StartCalls { get; private set; }
 
         public Task<IReadOnlyList<CompanionRepository>> GetRepositoriesAsync(CancellationToken cancellationToken) =>
@@ -61,6 +80,10 @@ public sealed class CompanionDeploymentWorkflowTests
             return Task.FromResult(new CompanionDeploymentRun("run-1", "repo-1", "prod", "queued", DateTimeOffset.UtcNow, null, null));
         }
 
-        public Task<CompanionDeploymentRun> GetDeploymentAsync(string deploymentId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<CompanionDeploymentRun> GetDeploymentAsync(string deploymentId, CancellationToken cancellationToken)
+        {
+            LastDeploymentId = deploymentId;
+            return Task.FromResult(new CompanionDeploymentRun(deploymentId, "repo-1", "prod", "succeeded", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null));
+        }
     }
 }
