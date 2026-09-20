@@ -41,6 +41,7 @@ public static class ServiceRegistration
             provider.GetRequiredService<IHostKeyVerifier>()));
         services.AddTransient<DeploymentQueueViewModel>();
         services.AddTransient<ServersViewModel>();
+        services.AddTransient<HostProfileEditorViewModel>();
         services.AddTransient<DeploymentPlanner>();
         services.AddTransient<DeploymentDryRunViewModel>();
         services.AddTransient<DryRunSummaryViewModel>();
