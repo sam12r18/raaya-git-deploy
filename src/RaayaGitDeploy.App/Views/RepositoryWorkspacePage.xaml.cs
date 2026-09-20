@@ -50,6 +50,7 @@ public sealed partial class RepositoryWorkspacePage : Page
         ViewModel.SelectedSection = section; UpdateSectionSurface();
         if (section == WorkspaceSection.Commands) await LoadCommandsAsync();
         if (section is WorkspaceSection.Servers or WorkspaceSection.DeployQueue) await LoadDeploymentAsync();
+        if (section == WorkspaceSection.History) await LoadHistoryAsync();
     }
 
     private void UpdateSectionSurface()
@@ -69,10 +70,32 @@ public sealed partial class RepositoryWorkspacePage : Page
     }
 
     private async Task LoadDeploymentAsync() { try { await _deployment.LoadServersAsync(CancellationToken.None); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
+    private async Task LoadHistoryAsync() { try { await _deployment.LoadHistoryAsync(CancellationToken.None); RefreshHistorySurface(); } catch (Exception ex) { ShowError(ex.Message); } }
     private void RefreshDeploymentSurface() { DeployQueueList.ItemsSource = null; DeployQueueList.ItemsSource = _deployment.Queue.Items; ServersList.ItemsSource = null; ServersList.ItemsSource = _deployment.Servers.Profiles; ServersList.SelectedItem = _deployment.Servers.SelectedProfile; DryRunList.ItemsSource = _deployment.PreviewPlan?.Operations; }
+    private void RefreshHistorySurface() { HistoryList.ItemsSource = null; HistoryList.ItemsSource = _deployment.History; if (_deployment.History.Count > 0) HistoryList.SelectedIndex = 0; }
     private void DeployAddSelectedChange_Click(object sender, RoutedEventArgs e) { try { if (ChangesList.SelectedItem is not ChangeItemViewModel change) throw new InvalidOperationException("Select a changed file first."); if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository first."); _deployment.Queue.AddGitSelection(Path.Combine(ViewModel.RepositoryPath, change.Path)); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
     private void DeployClear_Click(object sender, RoutedEventArgs e) { _deployment.Queue.Clear(); RefreshDeploymentSurface(); }
-    private void DryRun_Click(object sender, RoutedEventArgs e) { try { if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository first."); _deployment.RefreshDryRunPreview(ViewModel.RepositoryPath); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
+    private void DryRun_Click(object sender, RoutedEventArgs e) { try { if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository first."); _deployment.RefreshDryRunPreview(ViewModel.RepositoryPath); DeployResultText.Text = "Dry Run ready. Review the mapping before Deploy."; RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
+    private async void Deploy_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository first.");
+            if (_deployment.PreviewPlan is null) throw new InvalidOperationException("Run Dry Run before deployment.");
+            var profile = _deployment.Servers.SelectedProfile ?? throw new InvalidOperationException("Select a server profile before deployment.");
+            var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Confirm deployment", Content = $"Deploy {_deployment.PreviewPlan.Operations.Count} planned operation(s) to {profile.DisplayName}? Review the Dry Run mapping before continuing.", PrimaryButtonText = "Deploy", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            DeployResultText.Text = "Deployment in progress...";
+            var result = await _deployment.ExecuteAsync(ViewModel.RepositoryPath, CancellationToken.None);
+            var failed = result.Items.Count(item => item.Status == DeploymentItemStatus.Failed);
+            var blocked = result.Items.Count(item => item.Status == DeploymentItemStatus.Blocked);
+            DeployResultText.Text = result.Succeeded ? $"Deployment succeeded ({result.Items.Count} operation(s))." : $"Deployment completed with {failed} failed and {blocked} blocked operation(s). Open History for details and recovery guidance.";
+            await LoadHistoryAsync();
+        }
+        catch (Exception ex) { DeployResultText.Text = "Deployment failed before completion. Correct the error and run Dry Run again before retrying."; ShowError(ex.Message); }
+    }
+    private async void HistoryRefresh_Click(object sender, RoutedEventArgs e) => await LoadHistoryAsync();
+    private void HistoryList_SelectionChanged(object sender, SelectionChangedEventArgs e) { HistoryDetailsList.ItemsSource = (HistoryList.SelectedItem as DeploymentHistoryEntry)?.Items; }
     private void ServersList_SelectionChanged(object sender, SelectionChangedEventArgs e) { _deployment.Servers.SelectedProfile = ServersList.SelectedItem as ServerProfile; if (_deployment.Servers.SelectedProfile is { } p) { ServerName.Text=p.DisplayName; ServerHost.Text=p.Host; ServerPort.Text=p.Port.ToString(); ServerUsername.Text=p.Username; ServerRemoteRoot.Text=p.RemoteRoot; ServerKeyReference.Text=p.KeyReference; } }
     private void ServerNew_Click(object sender, RoutedEventArgs e) { _deployment.Servers.SelectedProfile=null; ServersList.SelectedItem=null; ServerName.Text=ServerHost.Text=ServerUsername.Text=ServerRemoteRoot.Text=ServerKeyReference.Text=string.Empty; ServerPort.Text="22"; }
     private async void ServerSave_Click(object sender, RoutedEventArgs e) { try { if (!int.TryParse(ServerPort.Text, out var port)) throw new InvalidOperationException("Port must be a number."); var profile=new ServerProfile(_deployment.Servers.SelectedProfile?.Id ?? Guid.NewGuid().ToString("N"), ServerName.Text.Trim(), ServerHost.Text.Trim(), port, ServerUsername.Text.Trim(), ServerRemoteRoot.Text.Trim(), ServerAuthenticationMode.SshKey, ServerKeyReference.Text.Trim()); await _deployment.Servers.SaveAsync(profile, CancellationToken.None); RefreshDeploymentSurface(); } catch(Exception ex){ ShowError(ex.Message); } }
