@@ -1,0 +1,40 @@
+<UserControl
+    x:Class="RaayaGitDeploy.App.Controls.DryRunSummary"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource M3SurfaceCardStyle}">
+        <StackPanel Spacing="{StaticResource M3Spacing12}">
+            <TextBlock Text="Dry run" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <TextBlock Text="Preview the deployment plan before any file is transferred or removed."
+                       TextWrapping="Wrap" Opacity="0.72" />
+
+            <InfoBar x:Name="StateBar" IsOpen="False" IsClosable="False" />
+
+            <Grid x:Name="SummaryPanel" ColumnSpacing="{StaticResource M3Spacing12}" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel><TextBlock Text="Uploads" Opacity="0.72"/><TextBlock x:Name="UploadCountText" Style="{StaticResource SubtitleTextBlockStyle}"/></StackPanel>
+                <StackPanel Grid.Column="1"><TextBlock Text="Deletes" Opacity="0.72"/><TextBlock x:Name="DeleteCountText" Style="{StaticResource SubtitleTextBlockStyle}"/></StackPanel>
+                <StackPanel Grid.Column="2"><TextBlock Text="Protected" Opacity="0.72"/><TextBlock x:Name="ProtectedCountText" Style="{StaticResource SubtitleTextBlockStyle}"/></StackPanel>
+            </Grid>
+
+            <ListView x:Name="OperationList" SelectionMode="None" MaxHeight="360">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Padding="0,8" ColumnSpacing="{StaticResource M3Spacing12}">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding Kind}" FontWeight="SemiBold" VerticalAlignment="Top" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding RemotePath}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding LocalPath}" TextWrapping="Wrap" Opacity="0.62" FontSize="12" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </StackPanel>
+    </Border>
+</UserControl>
