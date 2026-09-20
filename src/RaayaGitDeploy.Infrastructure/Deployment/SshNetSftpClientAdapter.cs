@@ -1,3 +1,4 @@
+using System.Text;
 using Renci.SshNet;
 using RaayaGitDeploy.Core.Deployment;
 
@@ -5,25 +6,45 @@ namespace RaayaGitDeploy.Infrastructure.Deployment;
 
 public sealed class SshNetSftpClientAdapter : ISftpClientAdapter
 {
-    private readonly SftpClient _client;
+    private readonly ServerProfile _profile;
+    private readonly ISecretStore _secretStore;
+    private SftpClient? _client;
+    private PrivateKeyFile? _privateKey;
+    private MemoryStream? _privateKeyStream;
 
-    public SshNetSftpClientAdapter(ServerProfile profile)
+    public SshNetSftpClientAdapter(ServerProfile profile, ISecretStore secretStore)
     {
-        ArgumentNullException.ThrowIfNull(profile);
-        if (string.IsNullOrWhiteSpace(profile.KeyReference))
-            throw new InvalidOperationException("An SSH private-key path is required.");
-        if (!File.Exists(profile.KeyReference))
-            throw new FileNotFoundException("The configured SSH private key was not found.", profile.KeyReference);
-
-        var key = new PrivateKeyFile(profile.KeyReference);
-        var authentication = new PrivateKeyAuthenticationMethod(profile.Username, key);
-        var connection = new ConnectionInfo(profile.Host, profile.Port, profile.Username, authentication);
-        _client = new SftpClient(connection);
+        _profile = profile ?? throw new ArgumentNullException(nameof(profile));
+        _secretStore = secretStore ?? throw new ArgumentNullException(nameof(secretStore));
     }
 
     public async Task ConnectAsync(Func<string, bool> verifyHostKey, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(verifyHostKey);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!SecretReference.TryParse(_profile.KeyReference, out var secretReference))
+            throw new InvalidOperationException(
+                "The SSH credential must be an opaque secret:// reference. Re-save this host profile to migrate legacy private-key paths.");
+
+        var privateKeyText = await _secretStore.GetAsync(secretReference, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(privateKeyText))
+            throw new InvalidOperationException("The SSH private key referenced by this host profile was not found in the protected secret store.");
+
+        var privateKeyBytes = Encoding.UTF8.GetBytes(privateKeyText);
+        try
+        {
+            _privateKeyStream = new MemoryStream(privateKeyBytes, writable: false);
+            _privateKey = new PrivateKeyFile(_privateKeyStream);
+            var authentication = new PrivateKeyAuthenticationMethod(_profile.Username, _privateKey);
+            var connection = new ConnectionInfo(_profile.Host, _profile.Port, _profile.Username, authentication);
+            _client = new SftpClient(connection);
+        }
+        finally
+        {
+            Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);
+        }
+
         var accepted = false;
         _client.HostKeyReceived += (_, args) =>
         {
@@ -39,26 +60,36 @@ public sealed class SshNetSftpClientAdapter : ISftpClientAdapter
 
     public async Task<IReadOnlyList<string>> ListAsync(string remotePath, CancellationToken cancellationToken)
     {
+        var client = RequireClient();
         var entries = await Task.Run(
-            () => _client.ListDirectory(remotePath).Select(item => item.FullName).ToArray(),
+            () => client.ListDirectory(remotePath).Select(item => item.FullName).ToArray(),
             cancellationToken).ConfigureAwait(false);
         return entries;
     }
 
     public async Task UploadAsync(string localPath, string remotePath, CancellationToken cancellationToken)
     {
+        var client = RequireClient();
         await using var stream = File.OpenRead(localPath);
-        await Task.Run(() => _client.UploadFile(stream, remotePath, true), cancellationToken).ConfigureAwait(false);
+        await Task.Run(() => client.UploadFile(stream, remotePath, true), cancellationToken).ConfigureAwait(false);
     }
 
-    public Task DeleteAsync(string remotePath, CancellationToken cancellationToken) =>
-        Task.Run(() => _client.DeleteFile(remotePath), cancellationToken);
+    public Task DeleteAsync(string remotePath, CancellationToken cancellationToken)
+    {
+        var client = RequireClient();
+        return Task.Run(() => client.DeleteFile(remotePath), cancellationToken);
+    }
 
     public ValueTask DisposeAsync()
     {
-        _client.Dispose();
+        _client?.Dispose();
+        _privateKey?.Dispose();
+        _privateKeyStream?.Dispose();
         return ValueTask.CompletedTask;
     }
+
+    private SftpClient RequireClient() =>
+        _client ?? throw new InvalidOperationException("The SFTP client is not connected.");
 }
 
 public sealed class TofuHostKeyVerifier : IHostKeyVerifier
