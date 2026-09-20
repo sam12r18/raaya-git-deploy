@@ -7,6 +7,7 @@
     <Project Path="src/RaayaGitDeploy.Presentation/RaayaGitDeploy.Presentation.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/RaayaGitDeploy.Android.Core.Tests/RaayaGitDeploy.Android.Core.Tests.csproj" />
     <Project Path="tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj" />
     <Project Path="tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj" />
     <Project Path="tests/RaayaGitDeploy.Presentation.Tests/RaayaGitDeploy.Presentation.Tests.csproj" />
