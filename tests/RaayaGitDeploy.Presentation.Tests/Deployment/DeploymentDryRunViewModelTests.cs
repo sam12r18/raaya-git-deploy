@@ -35,6 +35,17 @@ public sealed class DeploymentDryRunViewModelTests
     }
 
     [Fact]
+    public void Preview_RequiresAtLeastOneQueuedItem()
+    {
+        var viewModel = new DeploymentDryRunViewModel(new DeploymentPlanner());
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            viewModel.Preview("C:/repo", Profile("prod", "Production"), []));
+
+        Assert.Contains("Deploy Queue", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Preview_RejectsQueuePathOutsideRepository()
     {
         var repositoryRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "raaya-workbench-repo"));

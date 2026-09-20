@@ -19,10 +19,16 @@ public sealed class DeploymentDryRunViewModel(DeploymentPlanner planner)
             throw new InvalidOperationException("Select a server before creating a deployment preview.");
         }
 
+        var items = queueItems as IReadOnlyCollection<DeploymentQueueItem> ?? queueItems.ToArray();
+        if (items.Count == 0)
+        {
+            throw new InvalidOperationException("Add at least one file or folder to the Deploy Queue before running Dry Run.");
+        }
+
         return _planner.Plan(
             repositoryRoot,
             selectedProfile.RemoteRoot,
-            queueItems.Select(item => item.LocalPath),
+            items.Select(item => item.LocalPath),
             dryRun: true);
     }
 }
