@@ -20,7 +20,10 @@
             </Grid>
             <TextBox x:Name="Username" Header="Username" />
             <TextBox x:Name="RemoteRoot" Header="Remote root" PlaceholderText="/home/user" />
-            <TextBox x:Name="KeyReference" Header="SSH key reference" PlaceholderText="Credential/key identifier" />
+            <TextBox x:Name="KeyReference"
+                     Header="Protected SSH credential reference"
+                     PlaceholderText="secret://host/my-key"
+                     Description="Only an opaque secret:// reference is stored in this profile. Private-key file paths and key material are rejected." />
 
             <InfoBar x:Name="ConnectionInfo" IsOpen="False" IsClosable="False" />
             <ProgressBar x:Name="ConnectionProgress" IsIndeterminate="True" Visibility="Collapsed" />
