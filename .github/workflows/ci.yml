@@ -45,3 +45,6 @@ jobs:
 
       - name: Test Presentation
         run: dotnet test tests/RaayaGitDeploy.Presentation.Tests/RaayaGitDeploy.Presentation.Tests.csproj --configuration Release --no-build
+
+      - name: Test Android companion core
+        run: dotnet test tests/RaayaGitDeploy.Android.Core.Tests/RaayaGitDeploy.Android.Core.Tests.csproj --configuration Release --no-build
