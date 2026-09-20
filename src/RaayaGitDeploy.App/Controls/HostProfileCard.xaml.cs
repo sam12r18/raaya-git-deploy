@@ -17,6 +17,31 @@ public sealed partial class HostProfileCard : UserControl
 
     public event EventHandler<ServerProfile>? ProfileValidated;
 
+    public void LoadProfile(ServerProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ProfileId = profile.Id;
+        DisplayName.Text = profile.DisplayName;
+        Host.Text = profile.Host;
+        Port.Value = profile.Port;
+        Username.Text = profile.Username;
+        RemoteRoot.Text = profile.RemoteRoot;
+        KeyReference.Text = profile.KeyReference;
+        ConnectionInfo.IsOpen = false;
+    }
+
+    public void ClearProfile()
+    {
+        ProfileId = null;
+        DisplayName.Text = string.Empty;
+        Host.Text = string.Empty;
+        Port.Value = 22;
+        Username.Text = string.Empty;
+        RemoteRoot.Text = string.Empty;
+        KeyReference.Text = string.Empty;
+        ConnectionInfo.IsOpen = false;
+    }
+
     private async void TestConnection_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel is null)
