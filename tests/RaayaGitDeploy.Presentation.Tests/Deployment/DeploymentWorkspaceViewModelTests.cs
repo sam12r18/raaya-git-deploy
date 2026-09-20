@@ -103,6 +103,60 @@ public sealed class DeploymentWorkspaceViewModelTests
         Assert.Empty(transport.Uploads);
     }
 
+    [Fact]
+    public async Task PrepareRetry_Requeues_Failed_Uploads_And_Restores_Server_Without_Reusing_Dry_Run()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "raaya-workbench-retry");
+        var failedPath = Path.Combine(root, "dist", "app.js");
+        var successfulPath = Path.Combine(root, "dist", "style.css");
+        var profile = new ServerProfile("prod", "Production", "example.test", 22, "deploy", "/var/www/app", ServerAuthenticationMode.SshKey, "key:prod");
+        var queue = new DeploymentQueueViewModel();
+        var transport = new FakeTransport();
+        var servers = new ServersViewModel(new FakeStore(profile), transport);
+        var sut = CreateSut(queue, servers, transport);
+
+        await sut.LoadServersAsync(CancellationToken.None);
+        queue.AddFile(successfulPath);
+        sut.RefreshDryRunPreview(root);
+        var entry = new DeploymentHistoryEntry(
+            "failed-run",
+            DateTimeOffset.UtcNow,
+            profile.Id,
+            profile.DisplayName,
+            false,
+            [
+                new(new DeploymentOperation(DeploymentOperationKind.Upload, failedPath, "/var/www/app/dist/app.js"), DeploymentItemStatus.Failed, "network error"),
+                new(new DeploymentOperation(DeploymentOperationKind.Upload, successfulPath, "/var/www/app/dist/style.css"), DeploymentItemStatus.Succeeded)
+            ]);
+
+        sut.PrepareRetry(entry);
+
+        var queued = Assert.Single(sut.Queue.Items);
+        Assert.Equal(failedPath.Replace('\\', '/'), queued.LocalPath);
+        Assert.Equal(profile, sut.Servers.SelectedProfile);
+        Assert.Null(sut.PreviewPlan);
+    }
+
+    [Fact]
+    public async Task PrepareRetry_Rejects_Missing_Original_Server_Profile()
+    {
+        var transport = new FakeTransport();
+        var sut = CreateSut(new DeploymentQueueViewModel(), new ServersViewModel(new FakeStore(), transport), transport);
+        await sut.LoadServersAsync(CancellationToken.None);
+        var entry = new DeploymentHistoryEntry(
+            "failed-run",
+            DateTimeOffset.UtcNow,
+            "deleted-profile",
+            "Deleted server",
+            false,
+            [new(new DeploymentOperation(DeploymentOperationKind.Upload, Path.Combine(Path.GetTempPath(), "app.js"), "/app.js"), DeploymentItemStatus.Failed, "network error")]);
+
+        var error = Assert.Throws<InvalidOperationException>(() => sut.PrepareRetry(entry));
+
+        Assert.Contains("no longer available", error.Message, StringComparison.Ordinal);
+        Assert.Empty(sut.Queue.Items);
+    }
+
     private static DeploymentWorkspaceViewModel CreateSut(
         DeploymentQueueViewModel queue,
         ServersViewModel servers,

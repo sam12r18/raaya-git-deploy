@@ -46,6 +46,35 @@ public sealed class DeploymentWorkspaceViewModel
         _previewProfile = Servers.SelectedProfile;
     }
 
+    public void PrepareRetry(DeploymentHistoryEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        if (entry.Succeeded)
+            throw new InvalidOperationException("Successful deployments do not need recovery.");
+
+        var profile = Servers.Profiles.FirstOrDefault(item => item.Id == entry.ServerProfileId)
+            ?? throw new InvalidOperationException("The server profile used by this deployment is no longer available. Restore or select the intended profile before retrying.");
+
+        var retryablePaths = entry.Items
+            .Where(item => item.Status is DeploymentItemStatus.Failed or DeploymentItemStatus.Blocked)
+            .Where(item => item.Operation.Kind == DeploymentOperationKind.Upload)
+            .Select(item => item.Operation.LocalPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (retryablePaths.Length == 0)
+            throw new InvalidOperationException("This failed deployment has no upload operations that can be safely re-queued automatically.");
+
+        Queue.Clear();
+        foreach (var localPath in retryablePaths)
+            Queue.AddFile(localPath);
+
+        Servers.SelectedProfile = profile;
+        PreviewPlan = null;
+        _previewProfile = null;
+        LastResult = null;
+    }
+
     public async Task<DeploymentResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken)
     {
         if (Interlocked.CompareExchange(ref _executionInProgress, 1, 0) != 0)
