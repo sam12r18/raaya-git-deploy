@@ -22,6 +22,7 @@ public static class ServiceRegistration
 
         services.AddSingleton<IGitProcessRunner, GitProcessRunner>();
         services.AddSingleton<IGitRepositoryService, GitRepositoryService>();
+        services.AddSingleton<IGitRemoteTrackingService, GitRemoteTrackingService>();
         services.AddTransient<ITerminalProcessAdapter, PowerShellProcessAdapter>();
         services.AddTransient<ITerminalSessionFactory>(provider =>
             new ConPtyTerminalSessionFactory(() => provider.GetRequiredService<ITerminalProcessAdapter>()));
