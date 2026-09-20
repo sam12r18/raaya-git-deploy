@@ -9,11 +9,13 @@ public sealed class DeploymentWorkspaceViewModel
     public DeploymentWorkspaceViewModel(
         DeploymentQueueViewModel queue,
         ServersViewModel servers,
+        HostProfileEditorViewModel hostProfileEditor,
         DeploymentDryRunViewModel dryRun,
         DryRunSummaryViewModel dryRunSummary)
     {
         Queue = queue ?? throw new ArgumentNullException(nameof(queue));
         Servers = servers ?? throw new ArgumentNullException(nameof(servers));
+        HostProfileEditor = hostProfileEditor ?? throw new ArgumentNullException(nameof(hostProfileEditor));
         _dryRun = dryRun ?? throw new ArgumentNullException(nameof(dryRun));
         DryRunSummary = dryRunSummary ?? throw new ArgumentNullException(nameof(dryRunSummary));
     }
@@ -21,6 +23,8 @@ public sealed class DeploymentWorkspaceViewModel
     public DeploymentQueueViewModel Queue { get; }
 
     public ServersViewModel Servers { get; }
+
+    public HostProfileEditorViewModel HostProfileEditor { get; }
 
     public DryRunSummaryViewModel DryRunSummary { get; }
 
