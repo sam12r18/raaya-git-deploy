@@ -38,7 +38,7 @@ public static class ServiceRegistration
         services.AddSingleton<IHostKeyVerifier>(_ => new TofuHostKeyVerifier(Path.Combine(appData, "known-hosts")));
         services.AddTransient<ISftpClientAdapter>(_ => throw new InvalidOperationException("Resolve SFTP adapters through the profile factory."));
         services.AddSingleton<IRemoteTransport>(provider => new SftpRemoteTransport(
-            profile => new SshNetSftpClientAdapter(profile),
+            profile => new SshNetSftpClientAdapter(profile, provider.GetRequiredService<ISecretStore>()),
             provider.GetRequiredService<IHostKeyVerifier>()));
         services.AddTransient<DeploymentQueueViewModel>();
         services.AddTransient<ServersViewModel>();
