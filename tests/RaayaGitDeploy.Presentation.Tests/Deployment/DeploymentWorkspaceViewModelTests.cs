@@ -13,8 +13,9 @@ public sealed class DeploymentWorkspaceViewModelTests
         var profile = new ServerProfile("prod", "Production", "example.test", 22, "deploy", "/var/www/app", ServerAuthenticationMode.SshKey, "key:prod");
         var store = new FakeStore(profile);
         var queue = new DeploymentQueueViewModel();
-        var servers = new ServersViewModel(store, new FakeTransport());
-        var sut = new DeploymentWorkspaceViewModel(queue, servers, new DeploymentDryRunViewModel(new DeploymentPlanner()));
+        var transport = new FakeTransport();
+        var servers = new ServersViewModel(store, transport);
+        var sut = CreateSut(queue, servers, transport);
 
         await sut.LoadServersAsync(CancellationToken.None);
         queue.AddFile(localPath);
@@ -33,10 +34,8 @@ public sealed class DeploymentWorkspaceViewModelTests
         var localPath = Path.Combine(root, "dist", "app.js");
         var profile = new ServerProfile("stage", "Staging", "stage.example.test", 22, "deploy", "/srv/app", ServerAuthenticationMode.SshKey, "key:stage");
         var queue = new DeploymentQueueViewModel();
-        var sut = new DeploymentWorkspaceViewModel(
-            queue,
-            new ServersViewModel(new FakeStore(profile), new FakeTransport()),
-            new DeploymentDryRunViewModel(new DeploymentPlanner()));
+        var transport = new FakeTransport();
+        var sut = CreateSut(queue, new ServersViewModel(new FakeStore(profile), transport), transport);
 
         await sut.LoadServersAsync(CancellationToken.None);
         queue.AddFile(localPath);
@@ -52,12 +51,28 @@ public sealed class DeploymentWorkspaceViewModelTests
     [Fact]
     public void Preview_Requires_A_Selected_Server()
     {
-        var sut = new DeploymentWorkspaceViewModel(
+        var transport = new FakeTransport();
+        var sut = CreateSut(
             new DeploymentQueueViewModel(),
-            new ServersViewModel(new FakeStore(), new FakeTransport()),
-            new DeploymentDryRunViewModel(new DeploymentPlanner()));
+            new ServersViewModel(new FakeStore(), transport),
+            transport);
 
         Assert.Throws<InvalidOperationException>(() => sut.CreateDryRunPreview(Path.GetTempPath()));
+    }
+
+    private static DeploymentWorkspaceViewModel CreateSut(
+        DeploymentQueueViewModel queue,
+        ServersViewModel servers,
+        IRemoteTransport transport)
+    {
+        var planner = new DeploymentPlanner();
+        return new DeploymentWorkspaceViewModel(
+            queue,
+            servers,
+            new DeploymentDryRunViewModel(planner),
+            planner,
+            new DeploymentExecutor(transport),
+            new FakeHistoryStore());
     }
 
     private sealed class FakeStore(params ServerProfile[] profiles) : IServerProfileStore
@@ -66,6 +81,13 @@ public sealed class DeploymentWorkspaceViewModelTests
         public Task<IReadOnlyList<ServerProfile>> LoadAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ServerProfile>>(_profiles);
         public Task UpsertAsync(ServerProfile profile, CancellationToken cancellationToken) { _profiles.RemoveAll(x => x.Id == profile.Id); _profiles.Add(profile); return Task.CompletedTask; }
         public Task DeleteAsync(string id, CancellationToken cancellationToken) { _profiles.RemoveAll(x => x.Id == id); return Task.CompletedTask; }
+    }
+
+    private sealed class FakeHistoryStore : IDeploymentHistoryStore
+    {
+        private readonly List<DeploymentHistoryEntry> _entries = [];
+        public Task<IReadOnlyList<DeploymentHistoryEntry>> LoadAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<DeploymentHistoryEntry>>(_entries);
+        public Task AppendAsync(DeploymentHistoryEntry entry, CancellationToken cancellationToken) { _entries.Add(entry); return Task.CompletedTask; }
     }
 
     private sealed class FakeTransport : IRemoteTransport
