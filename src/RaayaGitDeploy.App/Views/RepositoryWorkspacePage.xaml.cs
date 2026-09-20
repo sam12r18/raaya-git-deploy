@@ -29,6 +29,7 @@ public sealed partial class RepositoryWorkspacePage : Page
         _deployment = deploymentViewModel ?? throw new ArgumentNullException(nameof(deploymentViewModel));
         _openCoordinator = openCoordinator ?? throw new ArgumentNullException(nameof(openCoordinator));
         InitializeComponent();
+        DryRunSummaryControl.ViewModel = _deployment.DryRunSummary;
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         WorkbenchNavigation.SelectedItem = WorkbenchNavigation.MenuItems[0];
         _terminalRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
@@ -69,7 +70,7 @@ public sealed partial class RepositoryWorkspacePage : Page
     }
 
     private async Task LoadDeploymentAsync() { try { await _deployment.LoadServersAsync(CancellationToken.None); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
-    private void RefreshDeploymentSurface() { DeployQueueList.ItemsSource = null; DeployQueueList.ItemsSource = _deployment.Queue.Items; ServersList.ItemsSource = null; ServersList.ItemsSource = _deployment.Servers.Profiles; ServersList.SelectedItem = _deployment.Servers.SelectedProfile; DryRunList.ItemsSource = _deployment.PreviewPlan?.Operations; }
+    private void RefreshDeploymentSurface() { DeployQueueList.ItemsSource = null; DeployQueueList.ItemsSource = _deployment.Queue.Items; ServersList.ItemsSource = null; ServersList.ItemsSource = _deployment.Servers.Profiles; ServersList.SelectedItem = _deployment.Servers.SelectedProfile; DryRunSummaryControl.Render(); }
     private void DeployAddSelectedChange_Click(object sender, RoutedEventArgs e) { try { if (ChangesList.SelectedItem is not ChangeItemViewModel change) throw new InvalidOperationException("Select a changed file first."); if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository first."); _deployment.Queue.AddGitSelection(Path.Combine(ViewModel.RepositoryPath, change.Path)); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
     private void DeployClear_Click(object sender, RoutedEventArgs e) { _deployment.Queue.Clear(); RefreshDeploymentSurface(); }
     private void DryRun_Click(object sender, RoutedEventArgs e) { try { if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository first."); _deployment.RefreshDryRunPreview(ViewModel.RepositoryPath); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
