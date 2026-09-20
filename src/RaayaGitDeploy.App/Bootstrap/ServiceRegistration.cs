@@ -21,6 +21,7 @@ public static class ServiceRegistration
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<IGitProcessRunner, GitProcessRunner>();
         services.AddSingleton<IGitRepositoryService, GitRepositoryService>();
+        services.AddSingleton<IGitMutationService, GitMutationService>();
         services.AddTransient<ITerminalProcessAdapter, PowerShellProcessAdapter>();
         services.AddTransient<ITerminalSessionFactory>(provider => new ConPtyTerminalSessionFactory(() => provider.GetRequiredService<ITerminalProcessAdapter>()));
         services.AddTransient<TerminalViewModel>();
@@ -41,6 +42,7 @@ public static class ServiceRegistration
         services.AddTransient<DeploymentExecutor>();
         services.AddTransient<DeploymentWorkspaceViewModel>();
         services.AddTransient<RepositoryWorkspaceViewModel>();
+        services.AddTransient<RepositoryCommitWorkflow>();
         return services;
     }
 }
