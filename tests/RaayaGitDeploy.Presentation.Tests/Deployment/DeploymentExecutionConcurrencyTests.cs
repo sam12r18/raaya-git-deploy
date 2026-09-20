@@ -9,34 +9,52 @@ public sealed class DeploymentExecutionConcurrencyTests
     public async Task Execute_Rejects_Concurrent_Deployment_Without_Second_Remote_Mutation()
     {
         var root = Path.Combine(Path.GetTempPath(), "raaya-workbench-concurrent-deploy");
+        Directory.CreateDirectory(root);
         var localPath = Path.Combine(root, "app.txt");
-        var profile = new ServerProfile("prod", "Production", "example.test", 22, "deploy", "/var/www/app", ServerAuthenticationMode.SshKey, "key:prod");
-        var queue = new DeploymentQueueViewModel();
-        var transport = new BlockingTransport();
-        var servers = new ServersViewModel(new FakeStore(profile), transport);
-        var planner = new DeploymentPlanner();
-        var sut = new DeploymentWorkspaceViewModel(queue, servers, new DeploymentDryRunViewModel(planner), planner, new DeploymentExecutor(transport), new FakeHistoryStore());
+        await File.WriteAllTextAsync(localPath, "concurrency-test");
 
-        await sut.LoadServersAsync(CancellationToken.None);
-        queue.AddFile(localPath);
-        sut.RefreshDryRunPreview(root);
-
-        var first = sut.ExecuteAsync(root, CancellationToken.None);
-        await transport.UploadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-
-        Assert.True(sut.IsExecuting);
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        try
         {
-            await sut.ExecuteAsync(root, CancellationToken.None);
-        });
-        Assert.Contains("already in progress", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1, transport.UploadCount);
+            var profile = new ServerProfile("prod", "Production", "example.test", 22, "deploy", "/var/www/app", ServerAuthenticationMode.SshKey, "key:prod");
+            var queue = new DeploymentQueueViewModel();
+            var transport = new BlockingTransport();
+            var servers = new ServersViewModel(new FakeStore(profile), transport);
+            var planner = new DeploymentPlanner();
+            var sut = new DeploymentWorkspaceViewModel(queue, servers, new DeploymentDryRunViewModel(planner), planner, new DeploymentExecutor(transport), new FakeHistoryStore());
 
-        transport.AllowUpload.TrySetResult(true);
-        await first;
+            await sut.LoadServersAsync(CancellationToken.None);
+            queue.AddFile(localPath);
+            sut.RefreshDryRunPreview(root);
 
-        Assert.False(sut.IsExecuting);
-        Assert.Equal(1, transport.UploadCount);
+            var first = sut.ExecuteAsync(root, CancellationToken.None);
+            await transport.UploadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.True(sut.IsExecuting);
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                await sut.ExecuteAsync(root, CancellationToken.None);
+            });
+            Assert.Contains("already in progress", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, transport.UploadCount);
+
+            transport.AllowUpload.TrySetResult(true);
+            await first;
+
+            Assert.False(sut.IsExecuting);
+            Assert.Equal(1, transport.UploadCount);
+        }
+        finally
+        {
+            if (File.Exists(localPath))
+            {
+                File.Delete(localPath);
+            }
+
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     private sealed class FakeStore(ServerProfile profile) : IServerProfileStore
