@@ -37,6 +37,8 @@ public sealed class HostProfileEditorViewModel
         if (string.IsNullOrWhiteSpace(Username)) throw new ArgumentException("Username is required.");
         if (string.IsNullOrWhiteSpace(RemoteRoot)) throw new ArgumentException("Remote root is required.");
         if (string.IsNullOrWhiteSpace(KeyReference)) throw new ArgumentException("SSH key reference is required. Raw private keys must not be stored in the profile.");
+        if (!SecretReference.TryParse(KeyReference, out var secretReference))
+            throw new ArgumentException("SSH credentials must use a protected secret:// reference. Legacy private-key file paths must be imported into the protected credential store first.");
 
         return new ServerProfile(
             id ?? Guid.NewGuid().ToString("N"),
@@ -46,7 +48,7 @@ public sealed class HostProfileEditorViewModel
             Username.Trim(),
             RemoteRoot.Trim(),
             ServerAuthenticationMode.SshKey,
-            KeyReference.Trim());
+            secretReference.ToString());
     }
 
     public async Task<ServerProfile?> SaveAndValidateAsync(string? id, CancellationToken cancellationToken)
