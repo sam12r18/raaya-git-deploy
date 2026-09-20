@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/RaayaGitDeploy.Android.Core/RaayaGitDeploy.Android.Core.csproj" />
     <Project Path="src/RaayaGitDeploy.App/RaayaGitDeploy.App.csproj" />
     <Project Path="src/RaayaGitDeploy.Core/RaayaGitDeploy.Core.csproj" />
     <Project Path="src/RaayaGitDeploy.Infrastructure/RaayaGitDeploy.Infrastructure.csproj" />
