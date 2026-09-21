@@ -55,13 +55,11 @@ public sealed class RepositoryOpenDeploymentStateTests
         git.FailPath = invalid;
         var coordinator = new RepositoryOpenCoordinator(new FakePicker(invalid), workspace, deployment);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await coordinator.OpenRepositoryAsync(CancellationToken.None);
-        });
+        await coordinator.OpenRepositoryAsync(CancellationToken.None);
 
         Assert.Equal(first, workspace.RepositoryPath);
         Assert.Single(deployment.Queue.Items);
+        Assert.Equal("Not a Git repository.", workspace.ErrorMessage);
     }
 
     private static async Task<DeploymentWorkspaceViewModel> CreateDeploymentAsync()
