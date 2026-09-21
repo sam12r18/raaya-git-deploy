@@ -21,14 +21,14 @@ public sealed class RepositoryCommitWorkflow
     {
         var (repositoryPath, paths) = RequireSelection(changes);
         await _mutationService.StageAsync(repositoryPath, paths, cancellationToken);
-        await _workspace.OpenRepositoryAsync(repositoryPath, cancellationToken);
+        await _workspace.RefreshCurrentRepositoryAsync(cancellationToken);
     }
 
     public async Task UnstageAsync(IReadOnlyList<ChangeItemViewModel> changes, CancellationToken cancellationToken = default)
     {
         var (repositoryPath, paths) = RequireSelection(changes);
         await _mutationService.UnstageAsync(repositoryPath, paths, cancellationToken);
-        await _workspace.OpenRepositoryAsync(repositoryPath, cancellationToken);
+        await _workspace.RefreshCurrentRepositoryAsync(cancellationToken);
     }
 
     public async Task<string> CommitAsync(string message, CancellationToken cancellationToken = default)
@@ -36,7 +36,7 @@ public sealed class RepositoryCommitWorkflow
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         var repositoryPath = RequireRepository();
         var sha = await _mutationService.CommitStagedAsync(repositoryPath, message.Trim(), cancellationToken);
-        await _workspace.OpenRepositoryAsync(repositoryPath, cancellationToken);
+        await _workspace.RefreshCurrentRepositoryAsync(cancellationToken);
         return sha;
     }
 
