@@ -46,6 +46,17 @@ public sealed class DeploymentWorkspaceViewModel
         _previewProfile = Servers.SelectedProfile;
     }
 
+    public void ResetForRepositoryChange()
+    {
+        if (IsExecuting)
+            throw new InvalidOperationException("Wait for the active deployment to finish before switching repositories.");
+
+        Queue.Clear();
+        PreviewPlan = null;
+        _previewProfile = null;
+        LastResult = null;
+    }
+
     public void PrepareRetry(DeploymentHistoryEntry entry, string repositoryRoot)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -84,32 +95,21 @@ public sealed class DeploymentWorkspaceViewModel
     public async Task<DeploymentResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken)
     {
         if (Interlocked.CompareExchange(ref _executionInProgress, 1, 0) != 0)
-        {
             throw new InvalidOperationException("A deployment is already in progress.");
-        }
 
         try
         {
             var profile = Servers.SelectedProfile ?? throw new InvalidOperationException("Select a server profile before deployment.");
             var preview = PreviewPlan ?? throw new InvalidOperationException("Run Dry Run before deployment.");
 
-            var plan = _planner.Plan(
-                repositoryRoot,
-                profile.RemoteRoot,
-                Queue.Items.Select(item => item.LocalPath),
-                dryRun: false);
-
+            var plan = _planner.Plan(repositoryRoot, profile.RemoteRoot, Queue.Items.Select(item => item.LocalPath), dryRun: false);
             if (_previewProfile is null || profile != _previewProfile || !preview.Operations.SequenceEqual(plan.Operations))
-            {
                 throw new InvalidOperationException("Deployment inputs changed after Dry Run. Run Dry Run again and review the updated plan before deploying.");
-            }
 
             var startedAt = DateTimeOffset.UtcNow;
             var result = await _executor.ExecuteAsync(profile, plan, cancellationToken);
             LastResult = result;
-
-            var entry = new DeploymentHistoryEntry(
-                Guid.NewGuid().ToString("N"), startedAt, profile.Id, profile.DisplayName, result.Succeeded, result.Items);
+            var entry = new DeploymentHistoryEntry(Guid.NewGuid().ToString("N"), startedAt, profile.Id, profile.DisplayName, result.Succeeded, result.Items);
             await _historyStore.AppendAsync(entry, cancellationToken);
             History = await _historyStore.LoadAsync(cancellationToken);
             return result;
