@@ -44,13 +44,34 @@ public sealed class CompanionShellStateTests
         Assert.Equal(CompanionShellScreen.HistoryDetail, shell.Screen);
         Assert.Equal("deploy-1", workflow.SelectedHistoryRun?.Id);
         Assert.Equal("deploy-1", api.LastDeploymentDetailId);
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await shell.OpenHistoryDetailAsync("foreign-deploy", CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            shell.OpenHistoryDetailAsync("foreign-deploy", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Shell_RemainsOnHistoryWhenAuthorizedDetailLoadFails()
+    {
+        var api = new FakeApi { FailDeploymentDetail = true };
+        var workflow = new CompanionDeploymentWorkflow(api);
+        var shell = new CompanionShellState(workflow);
+
+        await workflow.LoadRepositoriesAsync(CancellationToken.None);
+        await workflow.SelectRepositoryAsync("repo-1", CancellationToken.None);
+        await workflow.LoadHistoryAsync(CancellationToken.None);
+        shell.OpenHistory();
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            shell.OpenHistoryDetailAsync("deploy-1", CancellationToken.None));
+
+        Assert.Equal(CompanionShellScreen.History, shell.Screen);
+        Assert.Null(workflow.SelectedHistoryRun);
+        Assert.Equal("deploy-1", api.LastDeploymentDetailId);
     }
 
     private sealed class FakeApi : ICompanionDeploymentApi
     {
         public string? LastDeploymentDetailId { get; private set; }
+        public bool FailDeploymentDetail { get; init; }
 
         public Task<IReadOnlyList<CompanionRepository>> GetRepositoriesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanionRepository>>([new("repo-1", "Repo", "main", "abc123", true)]);
@@ -69,6 +90,9 @@ public sealed class CompanionShellStateTests
         public Task<CompanionDeploymentRun> GetDeploymentAsync(string deploymentId, CancellationToken cancellationToken)
         {
             LastDeploymentDetailId = deploymentId;
+            if (FailDeploymentDetail)
+                throw new HttpRequestException("Agent unavailable.");
+
             return Task.FromResult(new CompanionDeploymentRun(deploymentId, "repo-1", "prod", "succeeded", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null));
         }
     }
