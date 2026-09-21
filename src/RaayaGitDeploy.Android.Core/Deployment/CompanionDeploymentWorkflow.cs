@@ -8,7 +8,7 @@ namespace RaayaGitDeploy.Android.Core.Deployment;
 /// </summary>
 public sealed class CompanionDeploymentWorkflow
 {
-    private static readonly HashSet<string> TerminalStatuses = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> TerminalStates = new(StringComparer.OrdinalIgnoreCase)
     {
         "succeeded",
         "failed",
@@ -28,7 +28,7 @@ public sealed class CompanionDeploymentWorkflow
     public IReadOnlyList<CompanionDeploymentProfile> Profiles { get; private set; } = [];
     public CompanionDeploymentPreview? Preview { get; private set; }
     public CompanionDeploymentRun? CurrentRun { get; private set; }
-    public bool IsCurrentRunTerminal => CurrentRun is not null && TerminalStatuses.Contains(CurrentRun.Status);
+    public bool IsCurrentRunTerminal => CurrentRun is not null && TerminalStates.Contains(CurrentRun.State);
 
     public async Task LoadRepositoriesAsync(CancellationToken cancellationToken)
     {
