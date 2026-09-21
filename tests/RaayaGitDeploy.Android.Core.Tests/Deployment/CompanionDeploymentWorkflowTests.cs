@@ -20,6 +20,33 @@ public sealed class CompanionDeploymentWorkflowTests
     }
 
     [Fact]
+    public async Task LoadHistory_UsesSelectedRepositoryAndKeepsOnlyScopedRuns()
+    {
+        var api = new FakeApi();
+        var workflow = new CompanionDeploymentWorkflow(api);
+        await PrepareAsync(workflow);
+
+        var history = await workflow.LoadHistoryAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("repo-1", api.LastHistoryRepositoryId);
+        Assert.Single(history);
+        Assert.Equal("history-1", history[0].Id);
+        Assert.Same(history, workflow.History);
+    }
+
+    [Fact]
+    public async Task LoadHistory_RejectsRunFromAnotherRepository()
+    {
+        var api = new FakeApi { ReturnForeignHistory = true };
+        var workflow = new CompanionDeploymentWorkflow(api);
+        await PrepareAsync(workflow);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.LoadHistoryAsync(TestContext.Current.CancellationToken));
+
+        Assert.Empty(workflow.History);
+    }
+
+    [Fact]
     public async Task StartDeployment_RequiresConfirmationWhenProfileRequiresIt()
     {
         var api = new FakeApi();
@@ -75,15 +102,26 @@ public sealed class CompanionDeploymentWorkflowTests
     {
         public CompanionDeploymentRequest? LastRequest { get; private set; }
         public string? LastDeploymentId { get; private set; }
+        public string? LastHistoryRepositoryId { get; private set; }
         public int StartCalls { get; private set; }
         public int GetDeploymentCalls { get; private set; }
         public bool KeepRunning { get; init; }
+        public bool ReturnForeignHistory { get; init; }
 
         public Task<IReadOnlyList<CompanionRepository>> GetRepositoriesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanionRepository>>([new("repo-1", "Repo", "main", "abc123", true)]);
 
         public Task<IReadOnlyList<CompanionDeploymentProfile>> GetProfilesAsync(string repositoryId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanionDeploymentProfile>>([new("prod", "Production", "production", true)]);
+
+        public Task<IReadOnlyList<CompanionDeploymentRun>> GetDeploymentHistoryAsync(string repositoryId, CancellationToken cancellationToken)
+        {
+            LastHistoryRepositoryId = repositoryId;
+            var runRepositoryId = ReturnForeignHistory ? "repo-2" : repositoryId;
+            return Task.FromResult<IReadOnlyList<CompanionDeploymentRun>>([
+                new("history-1", runRepositoryId, "prod", "succeeded", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null)
+            ]);
+        }
 
         public Task<CompanionDeploymentPreview> DryRunAsync(CompanionDeploymentRequest request, CancellationToken cancellationToken)
         {
