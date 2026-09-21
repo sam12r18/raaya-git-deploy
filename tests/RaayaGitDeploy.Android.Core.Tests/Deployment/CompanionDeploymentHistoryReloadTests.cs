@@ -10,7 +10,7 @@ public sealed class CompanionDeploymentHistoryReloadTests
     {
         var api = new FailingReloadApi();
         var workflow = new CompanionDeploymentWorkflow(api);
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         await workflow.LoadRepositoriesAsync(cancellationToken);
         await workflow.SelectRepositoryAsync("repo-1", cancellationToken);
         await workflow.LoadHistoryAsync(cancellationToken);
