@@ -51,6 +51,32 @@ public sealed class CompanionDeploymentHttpClientTests
         Assert.Equal(0, handler.CallCount);
     }
 
+    [Fact]
+    public void Constructor_RejectsPlaintextAgentEndpointBeforeSessionCanBeSent()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "[]");
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://agent.example/") };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            new CompanionDeploymentHttpClient(http, new FakeAccessTokenStore("session-token")));
+
+        Assert.Contains("HTTPS", error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, handler.CallCount);
+    }
+
+    [Fact]
+    public void Constructor_RejectsEndpointWithEmbeddedCredentials()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "[]");
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://user:password@agent.example/") };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            new CompanionDeploymentHttpClient(http, new FakeAccessTokenStore("session-token")));
+
+        Assert.Contains("credentials", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, handler.CallCount);
+    }
+
     private sealed class FakeAccessTokenStore(string? token) : IAccessTokenStore
     {
         public bool Cleared { get; private set; }
