@@ -53,7 +53,7 @@ public sealed class CompanionDeploymentWorkflowTests
         var terminalRefresh = await workflow.RefreshDeploymentAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("run-1", api.LastDeploymentId);
-        Assert.Equal("succeeded", refreshed.Status);
+        Assert.Equal("succeeded", refreshed.State);
         Assert.True(workflow.IsCurrentRunTerminal);
         Assert.Same(refreshed, workflow.CurrentRun);
         Assert.Same(refreshed, terminalRefresh);
