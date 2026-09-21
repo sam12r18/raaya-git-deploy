@@ -22,6 +22,7 @@ public sealed class CompanionDeploymentWorkflow
     public CompanionDeploymentProfile? SelectedProfile { get; private set; }
     public IReadOnlyList<CompanionRepository> Repositories { get; private set; } = [];
     public IReadOnlyList<CompanionDeploymentProfile> Profiles { get; private set; } = [];
+    public IReadOnlyList<CompanionDeploymentRun> History { get; private set; } = [];
     public CompanionDeploymentPreview? Preview { get; private set; }
     public CompanionDeploymentRun? CurrentRun { get; private set; }
     public bool IsCurrentRunTerminal => CurrentRun is not null && TerminalStates.Contains(CurrentRun.State);
@@ -32,6 +33,7 @@ public sealed class CompanionDeploymentWorkflow
         SelectedRepository = null;
         SelectedProfile = null;
         Profiles = [];
+        History = [];
         Preview = null;
         CurrentRun = null;
     }
@@ -42,6 +44,7 @@ public sealed class CompanionDeploymentWorkflow
             ?? throw new InvalidOperationException("Select an authorized repository returned by the companion agent.");
         Profiles = await _api.GetProfilesAsync(SelectedRepository.Id, cancellationToken).ConfigureAwait(false);
         SelectedProfile = null;
+        History = [];
         Preview = null;
         CurrentRun = null;
     }
@@ -52,6 +55,20 @@ public sealed class CompanionDeploymentWorkflow
             ?? throw new InvalidOperationException("Select an authorized deployment profile returned by the companion agent.");
         Preview = null;
         CurrentRun = null;
+    }
+
+    public async Task<IReadOnlyList<CompanionDeploymentRun>> LoadHistoryAsync(CancellationToken cancellationToken)
+    {
+        var repository = SelectedRepository ?? throw new InvalidOperationException("Select a repository before loading deployment history.");
+        var history = await _api.GetDeploymentHistoryAsync(repository.Id, cancellationToken).ConfigureAwait(false);
+
+        // Treat the repository selected from the authorized agent list as a security boundary. A malformed
+        // or compromised response must not leak another repository's deployment metadata into this workflow.
+        if (history.Any(run => !string.Equals(run.RepositoryId, repository.Id, StringComparison.Ordinal)))
+            throw new InvalidOperationException("The companion agent returned deployment history for another repository.");
+
+        History = history;
+        return History;
     }
 
     public async Task<CompanionDeploymentPreview> DryRunAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken)
