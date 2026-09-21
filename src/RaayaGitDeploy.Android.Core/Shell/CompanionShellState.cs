@@ -39,8 +39,17 @@ public sealed class CompanionShellState
         if (string.IsNullOrWhiteSpace(deploymentId) || !_workflow.History.Any(run => string.Equals(run.Id, deploymentId, StringComparison.Ordinal)))
             throw new InvalidOperationException("Select a deployment from the loaded repository history.");
 
-        await _workflow.LoadHistoryDetailAsync(deploymentId, cancellationToken);
-        Screen = CompanionShellScreen.HistoryDetail;
+        var previousScreen = Screen;
+        try
+        {
+            await _workflow.LoadHistoryDetailAsync(deploymentId, cancellationToken);
+            Screen = CompanionShellScreen.HistoryDetail;
+        }
+        catch
+        {
+            Screen = previousScreen;
+            throw;
+        }
     }
 
     public void OpenDeployment()
