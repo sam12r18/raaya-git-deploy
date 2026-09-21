@@ -15,7 +15,7 @@ public sealed partial class RepositoryWorkspacePage
                 throw new InvalidOperationException("Select a failed deployment first.");
 
             var retryableCount = entry.Items.Count(item =>
-                item.Operation.Type == DeploymentOperationType.Upload &&
+                item.Operation.Kind == DeploymentOperationKind.Upload &&
                 item.Status is DeploymentItemStatus.Failed or DeploymentItemStatus.Blocked);
             if (retryableCount == 0)
                 throw new InvalidOperationException("The selected deployment has no failed or blocked uploads that can be retried safely.");
