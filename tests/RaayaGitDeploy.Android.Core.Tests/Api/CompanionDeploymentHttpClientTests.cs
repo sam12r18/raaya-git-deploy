@@ -15,7 +15,7 @@ public sealed class CompanionDeploymentHttpClientTests
         var tokens = new FakeAccessTokenStore("session-token");
         var client = new CompanionDeploymentHttpClient(http, tokens);
 
-        var repositories = await client.GetRepositoriesAsync(TestContext.Current.CancellationToken);
+        var repositories = await client.GetRepositoriesAsync(CancellationToken.None);
 
         Assert.Empty(repositories);
         Assert.Equal("Bearer", handler.AuthorizationScheme);
@@ -33,7 +33,7 @@ public sealed class CompanionDeploymentHttpClientTests
         var client = new CompanionDeploymentHttpClient(http, tokens);
 
         await Assert.ThrowsAsync<CompanionAuthenticationRequiredException>(() =>
-            client.GetRepositoriesAsync(TestContext.Current.CancellationToken));
+            client.GetRepositoriesAsync(CancellationToken.None));
 
         Assert.True(tokens.Cleared);
     }
@@ -46,7 +46,7 @@ public sealed class CompanionDeploymentHttpClientTests
         var client = new CompanionDeploymentHttpClient(http, new FakeAccessTokenStore(null));
 
         await Assert.ThrowsAsync<CompanionAuthenticationRequiredException>(() =>
-            client.GetRepositoriesAsync(TestContext.Current.CancellationToken));
+            client.GetRepositoriesAsync(CancellationToken.None));
 
         Assert.Equal(0, handler.CallCount);
     }
@@ -74,6 +74,18 @@ public sealed class CompanionDeploymentHttpClientTests
             new CompanionDeploymentHttpClient(http, new FakeAccessTokenStore("session-token")));
 
         Assert.Contains("credentials", error.Message.ToLowerInvariant());
+        Assert.Equal(0, handler.CallCount);
+    }
+
+    [Fact]
+    public void Constructor_RejectsEndpointWithQueryBeforeSessionCanBeSent()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "[]");
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://agent.example/?tenant=unsafe") };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new CompanionDeploymentHttpClient(http, new FakeAccessTokenStore("session-token")));
+
         Assert.Equal(0, handler.CallCount);
     }
 
