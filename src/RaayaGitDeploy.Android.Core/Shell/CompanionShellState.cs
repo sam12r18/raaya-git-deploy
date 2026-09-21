@@ -34,10 +34,12 @@ public sealed class CompanionShellState
         Screen = CompanionShellScreen.History;
     }
 
-    public void OpenHistoryDetail(string deploymentId)
+    public async Task OpenHistoryDetailAsync(string deploymentId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(deploymentId) || !_workflow.History.Any(run => string.Equals(run.Id, deploymentId, StringComparison.Ordinal)))
             throw new InvalidOperationException("Select a deployment from the loaded repository history.");
+
+        await _workflow.LoadHistoryDetailAsync(deploymentId, cancellationToken);
         Screen = CompanionShellScreen.HistoryDetail;
     }
 
