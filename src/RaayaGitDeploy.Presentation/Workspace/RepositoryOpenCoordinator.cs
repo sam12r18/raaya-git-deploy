@@ -30,6 +30,16 @@ public sealed class RepositoryOpenCoordinator
         {
             _viewModel.ClearError();
 
+            // Reject repository switching before opening the native picker. An active deployment owns the
+            // current repository/profile/queue snapshot, so presenting a picker would imply a switch can
+            // proceed when it cannot safely do so.
+            if (_deployment?.IsExecuting == true)
+            {
+                _viewModel.ReportError(new InvalidOperationException(
+                    "Wait for the active deployment to finish before switching repositories."));
+                return;
+            }
+
             string? path;
             try
             {
@@ -47,17 +57,6 @@ public sealed class RepositoryOpenCoordinator
 
             if (string.IsNullOrWhiteSpace(path))
             {
-                return;
-            }
-
-            // Do not let the workspace move to another repository while an execution is still using
-            // the current repository/profile/queue snapshot. ResetForRepositoryChange also guards this,
-            // but checking before OpenRepositoryAsync avoids switching the Git workspace first and only
-            // then discovering that deployment state cannot safely follow it.
-            if (_deployment?.IsExecuting == true)
-            {
-                _viewModel.ReportError(new InvalidOperationException(
-                    "Wait for the active deployment to finish before switching repositories."));
                 return;
             }
 
@@ -90,8 +89,6 @@ public sealed class RepositoryOpenCoordinator
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
         {
-            // Repository paths came from the workspace/folder picker. If normalization ever fails, fail safe and
-            // treat the selection as a repository change so stale deployment state cannot survive the transition.
             return false;
         }
     }
