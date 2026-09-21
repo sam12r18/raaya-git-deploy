@@ -10,12 +10,8 @@ public sealed class CompanionDeploymentWorkflowTests
     {
         var api = new FakeApi();
         var workflow = new CompanionDeploymentWorkflow(api);
-        await workflow.LoadRepositoriesAsync(TestContext.Current.CancellationToken);
-        await workflow.SelectRepositoryAsync("repo-1", TestContext.Current.CancellationToken);
-        workflow.SelectProfile("prod");
-
+        await PrepareAsync(workflow);
         var preview = await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
-
         Assert.Equal("preview-1", preview.Id);
         Assert.NotNull(api.LastRequest);
         Assert.Equal("repo-1", api.LastRequest!.RepositoryId);
@@ -28,13 +24,9 @@ public sealed class CompanionDeploymentWorkflowTests
     {
         var api = new FakeApi();
         var workflow = new CompanionDeploymentWorkflow(api);
-        await workflow.LoadRepositoriesAsync(TestContext.Current.CancellationToken);
-        await workflow.SelectRepositoryAsync("repo-1", TestContext.Current.CancellationToken);
-        workflow.SelectProfile("prod");
+        await PrepareAsync(workflow);
         await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            workflow.StartDeploymentAsync(false, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.StartDeploymentAsync(false, TestContext.Current.CancellationToken));
         Assert.Equal(0, api.StartCalls);
     }
 
@@ -43,15 +35,11 @@ public sealed class CompanionDeploymentWorkflowTests
     {
         var api = new FakeApi();
         var workflow = new CompanionDeploymentWorkflow(api);
-        await workflow.LoadRepositoriesAsync(TestContext.Current.CancellationToken);
-        await workflow.SelectRepositoryAsync("repo-1", TestContext.Current.CancellationToken);
-        workflow.SelectProfile("prod");
+        await PrepareAsync(workflow);
         await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
         await workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken);
-
         var refreshed = await workflow.RefreshDeploymentAsync(TestContext.Current.CancellationToken);
         var terminalRefresh = await workflow.RefreshDeploymentAsync(TestContext.Current.CancellationToken);
-
         Assert.Equal("run-1", api.LastDeploymentId);
         Assert.Equal("succeeded", refreshed.State);
         Assert.True(workflow.IsCurrentRunTerminal);
@@ -60,12 +48,36 @@ public sealed class CompanionDeploymentWorkflowTests
         Assert.Equal(1, api.GetDeploymentCalls);
     }
 
+    [Fact]
+    public async Task PollUntilTerminal_StopsAtConfiguredAttemptLimit()
+    {
+        var api = new FakeApi { KeepRunning = true };
+        var workflow = new CompanionDeploymentWorkflow(api);
+        await PrepareAsync(workflow);
+        await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
+        await workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken);
+
+        var run = await workflow.PollUntilTerminalAsync(3, TimeSpan.Zero, TestContext.Current.CancellationToken);
+
+        Assert.Equal("running", run.State);
+        Assert.False(workflow.IsCurrentRunTerminal);
+        Assert.Equal(3, api.GetDeploymentCalls);
+    }
+
+    private static async Task PrepareAsync(CompanionDeploymentWorkflow workflow)
+    {
+        await workflow.LoadRepositoriesAsync(TestContext.Current.CancellationToken);
+        await workflow.SelectRepositoryAsync("repo-1", TestContext.Current.CancellationToken);
+        workflow.SelectProfile("prod");
+    }
+
     private sealed class FakeApi : ICompanionDeploymentApi
     {
         public CompanionDeploymentRequest? LastRequest { get; private set; }
         public string? LastDeploymentId { get; private set; }
         public int StartCalls { get; private set; }
         public int GetDeploymentCalls { get; private set; }
+        public bool KeepRunning { get; init; }
 
         public Task<IReadOnlyList<CompanionRepository>> GetRepositoriesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanionRepository>>([new("repo-1", "Repo", "main", "abc123", true)]);
@@ -89,7 +101,8 @@ public sealed class CompanionDeploymentWorkflowTests
         {
             GetDeploymentCalls++;
             LastDeploymentId = deploymentId;
-            return Task.FromResult(new CompanionDeploymentRun(deploymentId, "repo-1", "prod", "succeeded", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null));
+            var state = KeepRunning ? "running" : "succeeded";
+            return Task.FromResult(new CompanionDeploymentRun(deploymentId, "repo-1", "prod", state, DateTimeOffset.UtcNow, KeepRunning ? null : DateTimeOffset.UtcNow, null));
         }
     }
 }
