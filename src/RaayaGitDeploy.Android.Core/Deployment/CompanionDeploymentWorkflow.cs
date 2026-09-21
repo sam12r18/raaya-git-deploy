@@ -79,6 +79,9 @@ public sealed class CompanionDeploymentWorkflow
         if (string.IsNullOrWhiteSpace(deploymentId) || !History.Any(run => string.Equals(run.Id, deploymentId, StringComparison.Ordinal)))
             throw new InvalidOperationException("Select a deployment from the loaded repository history.");
 
+        // Never leave a previously selected detail visible while a different detail is being resolved.
+        // If the agent rejects the request or violates repository scoping, presentation sees no stale detail.
+        SelectedHistoryRun = null;
         var detail = await _api.GetDeploymentAsync(deploymentId, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(detail.RepositoryId, repository.Id, StringComparison.Ordinal))
             throw new InvalidOperationException("The companion agent returned deployment details for another repository.");
