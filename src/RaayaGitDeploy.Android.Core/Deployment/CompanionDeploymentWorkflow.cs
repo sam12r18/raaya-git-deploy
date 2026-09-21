@@ -63,13 +63,17 @@ public sealed class CompanionDeploymentWorkflow
     public async Task<IReadOnlyList<CompanionDeploymentRun>> LoadHistoryAsync(CancellationToken cancellationToken)
     {
         var repository = SelectedRepository ?? throw new InvalidOperationException("Select a repository before loading deployment history.");
+
+        // History is presentation state, not a cache of trusted authorization data. Clear it before a
+        // network reload so an offline/error response can never leave another, now-stale timeline visible.
+        History = [];
+        SelectedHistoryRun = null;
         var history = await _api.GetDeploymentHistoryAsync(repository.Id, cancellationToken).ConfigureAwait(false);
 
         if (history.Any(run => !string.Equals(run.RepositoryId, repository.Id, StringComparison.Ordinal)))
             throw new InvalidOperationException("The companion agent returned deployment history for another repository.");
 
         History = history;
-        SelectedHistoryRun = null;
         return History;
     }
 
