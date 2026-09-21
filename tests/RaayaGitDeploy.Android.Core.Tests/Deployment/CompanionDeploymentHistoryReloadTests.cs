@@ -17,7 +17,10 @@ public sealed class CompanionDeploymentHistoryReloadTests
         Assert.Single(workflow.History);
 
         api.FailHistory = true;
-        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.LoadHistoryAsync(cancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await workflow.LoadHistoryAsync(cancellationToken);
+        });
 
         Assert.Empty(workflow.History);
         Assert.Null(workflow.SelectedHistoryRun);
