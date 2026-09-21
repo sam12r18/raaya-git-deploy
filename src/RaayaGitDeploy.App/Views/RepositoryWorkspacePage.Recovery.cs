@@ -13,6 +13,8 @@ public sealed partial class RepositoryWorkspacePage
         {
             if (HistoryList.SelectedItem is not DeploymentHistoryEntry entry)
                 throw new InvalidOperationException("Select a failed deployment first.");
+            if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath))
+                throw new InvalidOperationException("Open the repository associated with this deployment before preparing a retry.");
 
             var retryableCount = entry.Items.Count(item =>
                 item.Operation.Kind == DeploymentOperationKind.Upload &&
@@ -32,7 +34,7 @@ public sealed partial class RepositoryWorkspacePage
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
                 return;
 
-            _deployment.PrepareRetry(entry);
+            _deployment.PrepareRetry(entry, ViewModel.RepositoryPath);
             RefreshDeploymentSurface();
             HistoryRecoveryText.Text = $"Retry prepared for {_deployment.Queue.Items.Count} failed/blocked upload(s). Review the server and run a new Dry Run before deploying.";
             NavigateToSection(WorkspaceSection.DeployQueue);
