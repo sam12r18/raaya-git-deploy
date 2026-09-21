@@ -42,6 +42,28 @@ public sealed class RepositoryOpenDeploymentStateTests
         Assert.Equal(second, workspace.RepositoryPath);
     }
 
+    [Fact]
+    public async Task OpeningInvalidRepository_PreservesWorkspaceAndDeploymentQueue()
+    {
+        var first = Path.Combine(Path.GetTempPath(), "raaya-open-valid-repository");
+        var invalid = Path.Combine(Path.GetTempPath(), "raaya-open-invalid-repository");
+        var git = new FakeGitRepositoryService();
+        var workspace = new RepositoryWorkspaceViewModel(git);
+        await workspace.OpenRepositoryAsync(first, CancellationToken.None);
+        var deployment = await CreateDeploymentAsync();
+        deployment.Queue.AddFile(Path.Combine(first, "app.js"));
+        git.FailPath = invalid;
+        var coordinator = new RepositoryOpenCoordinator(new FakePicker(invalid), workspace, deployment);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await coordinator.OpenRepositoryAsync(CancellationToken.None);
+        });
+
+        Assert.Equal(first, workspace.RepositoryPath);
+        Assert.Single(deployment.Queue.Items);
+    }
+
     private static async Task<DeploymentWorkspaceViewModel> CreateDeploymentAsync()
     {
         var profile = new ServerProfile("prod", "Production", "example.test", 22, "deploy", "/srv/app", ServerAuthenticationMode.SshKey, "key:prod");
@@ -61,9 +83,14 @@ public sealed class RepositoryOpenDeploymentStateTests
     private sealed class FakeGitRepositoryService : IGitRepositoryService
     {
         public string? ContextRequestedPath { get; private set; }
+        public string? FailPath { get; set; }
+
         public Task<GitRepositoryContext> GetContextAsync(string path, CancellationToken cancellationToken)
         {
             ContextRequestedPath = path;
+            if (string.Equals(path, FailPath, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Not a Git repository.");
+
             return Task.FromResult(new GitRepositoryContext(path, "main", new string('a', 40)));
         }
         public Task<IReadOnlyList<GitWorkingTreeChange>> GetWorkingTreeChangesAsync(string repositoryPath, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<GitWorkingTreeChange>>([]);
