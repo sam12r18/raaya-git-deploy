@@ -8,7 +8,7 @@ public sealed class RepositoryOpenAtomicityTests
     [Fact]
     public async Task OpenRepositoryAsync_FailedSwitch_PreservesCurrentRepositoryState()
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         var git = new SwitchingGitRepositoryService();
         var viewModel = new RepositoryWorkspaceViewModel(git);
 
