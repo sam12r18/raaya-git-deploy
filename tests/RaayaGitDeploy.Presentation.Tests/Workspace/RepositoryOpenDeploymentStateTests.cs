@@ -63,12 +63,13 @@ public sealed class RepositoryOpenDeploymentStateTests
     }
 
     [Fact]
-    public async Task CancellingFolderPicker_PreservesWorkspaceAndDeploymentQueue()
+    public async Task CancellingFolderPicker_PreservesWorkspaceDeploymentQueueAndDiagnostic()
     {
         var root = Path.Combine(Path.GetTempPath(), "raaya-open-picker-cancel");
         var git = new FakeGitRepositoryService();
         var workspace = new RepositoryWorkspaceViewModel(git);
         await workspace.OpenRepositoryAsync(root, CancellationToken.None);
+        workspace.ReportError(new InvalidOperationException("Keep this diagnostic visible."));
         var deployment = await CreateDeploymentAsync();
         deployment.Queue.AddFile(Path.Combine(root, "app.js"));
         var requestedBeforeCancel = git.ContextRequestedPath;
@@ -79,6 +80,7 @@ public sealed class RepositoryOpenDeploymentStateTests
         Assert.Equal(root, workspace.RepositoryPath);
         Assert.Single(deployment.Queue.Items);
         Assert.Equal(requestedBeforeCancel, git.ContextRequestedPath);
+        Assert.Equal("Keep this diagnostic visible.", workspace.ErrorMessage);
     }
 
     private static async Task<DeploymentWorkspaceViewModel> CreateDeploymentAsync()
