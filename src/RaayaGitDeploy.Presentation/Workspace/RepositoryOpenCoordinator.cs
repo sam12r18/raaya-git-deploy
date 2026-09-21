@@ -55,7 +55,7 @@ public sealed class RepositoryOpenCoordinator
 
             if (_deployment is not null &&
                 !string.IsNullOrWhiteSpace(_viewModel.RepositoryPath) &&
-                !string.Equals(previousRepository, _viewModel.RepositoryPath, StringComparison.OrdinalIgnoreCase))
+                !AreSameRepository(previousRepository, _viewModel.RepositoryPath))
             {
                 _deployment.ResetForRepositoryChange();
             }
@@ -63,6 +63,25 @@ public sealed class RepositoryOpenCoordinator
         finally
         {
             Interlocked.Exchange(ref _openAttemptInProgress, 0);
+        }
+    }
+
+    private static bool AreSameRepository(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        try
+        {
+            var normalizedLeft = Path.TrimEndingDirectorySeparator(Path.GetFullPath(left));
+            var normalizedRight = Path.TrimEndingDirectorySeparator(Path.GetFullPath(right));
+            return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // Repository paths came from the workspace/folder picker. If normalization ever fails, fail safe and
+            // treat the selection as a repository change so stale deployment state cannot survive the transition.
+            return false;
         }
     }
 }
