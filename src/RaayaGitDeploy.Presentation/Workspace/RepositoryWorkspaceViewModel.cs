@@ -44,10 +44,14 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         await ExecuteAsync(async () =>
         {
-            ClearRepositoryState();
+            // Resolve the candidate repository completely before replacing the current workspace. A failed
+            // FolderPicker selection (not a Git repository, inaccessible path, etc.) must not destroy the
+            // repository/review state the user was already working with.
             var context = await _repositoryService.GetContextAsync(path, cancellationToken);
             var changes = await _repositoryService.GetWorkingTreeChangesAsync(context.RootPath, cancellationToken);
             var commits = await _repositoryService.GetRecentCommitsAsync(context.RootPath, RecentCommitLimit, cancellationToken);
+
+            ClearRepositoryState();
             RepositoryPath = context.RootPath;
             BranchName = context.BranchName;
             HeadSha = context.HeadSha;
