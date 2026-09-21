@@ -16,12 +16,9 @@ public sealed class DeploymentWorkspaceViewModelTests
         var transport = new FakeTransport();
         var servers = new ServersViewModel(store, transport);
         var sut = CreateSut(queue, servers, transport);
-
         await sut.LoadServersAsync(CancellationToken.None);
         queue.AddFile(localPath);
-
         var plan = sut.CreateDryRunPreview(root);
-
         Assert.True(plan.IsDryRun);
         var operation = Assert.Single(plan.Operations);
         Assert.Equal("/var/www/app/src/App.cs", operation.RemotePath);
@@ -36,12 +33,9 @@ public sealed class DeploymentWorkspaceViewModelTests
         var queue = new DeploymentQueueViewModel();
         var transport = new FakeTransport();
         var sut = CreateSut(queue, new ServersViewModel(new FakeStore(profile), transport), transport);
-
         await sut.LoadServersAsync(CancellationToken.None);
         queue.AddFile(localPath);
-
         sut.RefreshDryRunPreview(root);
-
         Assert.NotNull(sut.PreviewPlan);
         Assert.True(sut.PreviewPlan!.IsDryRun);
         var operation = Assert.Single(sut.PreviewPlan.Operations);
@@ -52,11 +46,7 @@ public sealed class DeploymentWorkspaceViewModelTests
     public void Preview_Requires_A_Selected_Server()
     {
         var transport = new FakeTransport();
-        var sut = CreateSut(
-            new DeploymentQueueViewModel(),
-            new ServersViewModel(new FakeStore(), transport),
-            transport);
-
+        var sut = CreateSut(new DeploymentQueueViewModel(), new ServersViewModel(new FakeStore(), transport), transport);
         Assert.Throws<InvalidOperationException>(() => sut.CreateDryRunPreview(Path.GetTempPath()));
     }
 
@@ -68,14 +58,11 @@ public sealed class DeploymentWorkspaceViewModelTests
         var queue = new DeploymentQueueViewModel();
         var transport = new FakeTransport();
         var sut = CreateSut(queue, new ServersViewModel(new FakeStore(profile), transport), transport);
-
         await sut.LoadServersAsync(CancellationToken.None);
         queue.AddFile(Path.Combine(root, "first.txt"));
         sut.RefreshDryRunPreview(root);
         queue.AddFile(Path.Combine(root, "second.txt"));
-
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ExecuteAsync(root, CancellationToken.None));
-
         Assert.Contains("Run Dry Run again", error.Message, StringComparison.Ordinal);
         Assert.Empty(transport.Uploads);
     }
@@ -90,15 +77,12 @@ public sealed class DeploymentWorkspaceViewModelTests
         var transport = new FakeTransport();
         var servers = new ServersViewModel(new FakeStore(production, staging), transport);
         var sut = CreateSut(queue, servers, transport);
-
         await sut.LoadServersAsync(CancellationToken.None);
         servers.SelectedProfile = production;
         queue.AddFile(Path.Combine(root, "app.txt"));
         sut.RefreshDryRunPreview(root);
         servers.SelectedProfile = staging;
-
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ExecuteAsync(root, CancellationToken.None));
-
         Assert.Contains("Run Dry Run again", error.Message, StringComparison.Ordinal);
         Assert.Empty(transport.Uploads);
     }
@@ -114,23 +98,15 @@ public sealed class DeploymentWorkspaceViewModelTests
         var transport = new FakeTransport();
         var servers = new ServersViewModel(new FakeStore(profile), transport);
         var sut = CreateSut(queue, servers, transport);
-
         await sut.LoadServersAsync(CancellationToken.None);
         queue.AddFile(successfulPath);
         sut.RefreshDryRunPreview(root);
-        var entry = new DeploymentHistoryEntry(
-            "failed-run",
-            DateTimeOffset.UtcNow,
-            profile.Id,
-            profile.DisplayName,
-            false,
-            [
-                new(new DeploymentOperation(DeploymentOperationKind.Upload, failedPath, "/var/www/app/dist/app.js"), DeploymentItemStatus.Failed, "network error"),
-                new(new DeploymentOperation(DeploymentOperationKind.Upload, successfulPath, "/var/www/app/dist/style.css"), DeploymentItemStatus.Succeeded)
-            ]);
-
-        sut.PrepareRetry(entry);
-
+        var entry = new DeploymentHistoryEntry("failed-run", DateTimeOffset.UtcNow, profile.Id, profile.DisplayName, false,
+        [
+            new(new DeploymentOperation(DeploymentOperationKind.Upload, failedPath, "/var/www/app/dist/app.js"), DeploymentItemStatus.Failed, "network error"),
+            new(new DeploymentOperation(DeploymentOperationKind.Upload, successfulPath, "/var/www/app/dist/style.css"), DeploymentItemStatus.Succeeded)
+        ]);
+        sut.PrepareRetry(entry, root);
         var queued = Assert.Single(sut.Queue.Items);
         Assert.Equal(failedPath.Replace('\\', '/'), queued.LocalPath);
         Assert.Equal(profile, sut.Servers.SelectedProfile);
@@ -138,38 +114,39 @@ public sealed class DeploymentWorkspaceViewModelTests
     }
 
     [Fact]
+    public async Task PrepareRetry_Rejects_History_From_Different_Repository()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "raaya-workbench-current-repo");
+        var otherRoot = Path.Combine(Path.GetTempPath(), "raaya-workbench-other-repo");
+        var profile = new ServerProfile("prod", "Production", "example.test", 22, "deploy", "/var/www/app", ServerAuthenticationMode.SshKey, "key:prod");
+        var transport = new FakeTransport();
+        var sut = CreateSut(new DeploymentQueueViewModel(), new ServersViewModel(new FakeStore(profile), transport), transport);
+        await sut.LoadServersAsync(CancellationToken.None);
+        var entry = new DeploymentHistoryEntry("other-run", DateTimeOffset.UtcNow, profile.Id, profile.DisplayName, false,
+            [new(new DeploymentOperation(DeploymentOperationKind.Upload, Path.Combine(otherRoot, "app.js"), "/app.js"), DeploymentItemStatus.Failed, "network error")]);
+        var error = Assert.Throws<InvalidOperationException>(() => sut.PrepareRetry(entry, root));
+        Assert.Contains("original repository", error.Message, StringComparison.Ordinal);
+        Assert.Empty(sut.Queue.Items);
+    }
+
+    [Fact]
     public async Task PrepareRetry_Rejects_Missing_Original_Server_Profile()
     {
+        var root = Path.Combine(Path.GetTempPath(), "raaya-workbench-missing-profile");
         var transport = new FakeTransport();
         var sut = CreateSut(new DeploymentQueueViewModel(), new ServersViewModel(new FakeStore(), transport), transport);
         await sut.LoadServersAsync(CancellationToken.None);
-        var entry = new DeploymentHistoryEntry(
-            "failed-run",
-            DateTimeOffset.UtcNow,
-            "deleted-profile",
-            "Deleted server",
-            false,
-            [new(new DeploymentOperation(DeploymentOperationKind.Upload, Path.Combine(Path.GetTempPath(), "app.js"), "/app.js"), DeploymentItemStatus.Failed, "network error")]);
-
-        var error = Assert.Throws<InvalidOperationException>(() => sut.PrepareRetry(entry));
-
+        var entry = new DeploymentHistoryEntry("failed-run", DateTimeOffset.UtcNow, "deleted-profile", "Deleted server", false,
+            [new(new DeploymentOperation(DeploymentOperationKind.Upload, Path.Combine(root, "app.js"), "/app.js"), DeploymentItemStatus.Failed, "network error")]);
+        var error = Assert.Throws<InvalidOperationException>(() => sut.PrepareRetry(entry, root));
         Assert.Contains("no longer available", error.Message, StringComparison.Ordinal);
         Assert.Empty(sut.Queue.Items);
     }
 
-    private static DeploymentWorkspaceViewModel CreateSut(
-        DeploymentQueueViewModel queue,
-        ServersViewModel servers,
-        IRemoteTransport transport)
+    private static DeploymentWorkspaceViewModel CreateSut(DeploymentQueueViewModel queue, ServersViewModel servers, IRemoteTransport transport)
     {
         var planner = new DeploymentPlanner();
-        return new DeploymentWorkspaceViewModel(
-            queue,
-            servers,
-            new DeploymentDryRunViewModel(planner),
-            planner,
-            new DeploymentExecutor(transport),
-            new FakeHistoryStore());
+        return new DeploymentWorkspaceViewModel(queue, servers, new DeploymentDryRunViewModel(planner), planner, new DeploymentExecutor(transport), new FakeHistoryStore());
     }
 
     private sealed class FakeStore(params ServerProfile[] profiles) : IServerProfileStore
