@@ -37,6 +37,9 @@ public sealed class CompanionDeploymentHttpClient : ICompanionDeploymentApi
     public Task<CompanionDeploymentRun> GetDeploymentAsync(string deploymentId, CancellationToken cancellationToken) =>
         SendAsync<CompanionDeploymentRun>(HttpMethod.Get, $"{ApiRoot}deployments/{Escape(deploymentId)}", null, cancellationToken);
 
+    public Task<IReadOnlyList<CompanionDeploymentRun>> GetDeploymentHistoryAsync(string repositoryId, CancellationToken cancellationToken) =>
+        SendAsync<IReadOnlyList<CompanionDeploymentRun>>(HttpMethod.Get, $"{ApiRoot}repositories/{Escape(repositoryId)}/deployments", null, cancellationToken);
+
     private async Task<T> SendAsync<T>(HttpMethod method, string relativeUri, object? body, CancellationToken cancellationToken)
     {
         var token = await _tokenStore.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
