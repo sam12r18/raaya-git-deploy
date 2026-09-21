@@ -39,7 +39,7 @@ public sealed class CompanionDeploymentWorkflowTests
     }
 
     [Fact]
-    public async Task RefreshDeployment_UsesAgentRunIdAndUpdatesCurrentRun()
+    public async Task RefreshDeployment_UsesAgentRunIdAndStopsPollingAfterTerminalResult()
     {
         var api = new FakeApi();
         var workflow = new CompanionDeploymentWorkflow(api);
@@ -50,10 +50,14 @@ public sealed class CompanionDeploymentWorkflowTests
         await workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken);
 
         var refreshed = await workflow.RefreshDeploymentAsync(TestContext.Current.CancellationToken);
+        var terminalRefresh = await workflow.RefreshDeploymentAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("run-1", api.LastDeploymentId);
         Assert.Equal("succeeded", refreshed.Status);
+        Assert.True(workflow.IsCurrentRunTerminal);
         Assert.Same(refreshed, workflow.CurrentRun);
+        Assert.Same(refreshed, terminalRefresh);
+        Assert.Equal(1, api.GetDeploymentCalls);
     }
 
     private sealed class FakeApi : ICompanionDeploymentApi
@@ -61,6 +65,7 @@ public sealed class CompanionDeploymentWorkflowTests
         public CompanionDeploymentRequest? LastRequest { get; private set; }
         public string? LastDeploymentId { get; private set; }
         public int StartCalls { get; private set; }
+        public int GetDeploymentCalls { get; private set; }
 
         public Task<IReadOnlyList<CompanionRepository>> GetRepositoriesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanionRepository>>([new("repo-1", "Repo", "main", "abc123", true)]);
@@ -82,6 +87,7 @@ public sealed class CompanionDeploymentWorkflowTests
 
         public Task<CompanionDeploymentRun> GetDeploymentAsync(string deploymentId, CancellationToken cancellationToken)
         {
+            GetDeploymentCalls++;
             LastDeploymentId = deploymentId;
             return Task.FromResult(new CompanionDeploymentRun(deploymentId, "repo-1", "prod", "succeeded", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null));
         }
