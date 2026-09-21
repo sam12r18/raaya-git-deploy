@@ -73,7 +73,7 @@ public sealed class CompanionDeploymentHttpClientTests
         var error = Assert.Throws<InvalidOperationException>(() =>
             new CompanionDeploymentHttpClient(http, new FakeAccessTokenStore("session-token")));
 
-        Assert.Contains("credentials", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("credentials", error.Message.ToLowerInvariant());
         Assert.Equal(0, handler.CallCount);
     }
 
