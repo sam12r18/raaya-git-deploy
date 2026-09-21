@@ -8,6 +8,15 @@ namespace RaayaGitDeploy.Android.Core.Deployment;
 /// </summary>
 public sealed class CompanionDeploymentWorkflow
 {
+    private static readonly HashSet<string> TerminalStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "succeeded",
+        "failed",
+        "cancelled",
+        "canceled",
+        "blocked"
+    };
+
     private readonly ICompanionDeploymentApi _api;
 
     public CompanionDeploymentWorkflow(ICompanionDeploymentApi api) =>
@@ -19,6 +28,7 @@ public sealed class CompanionDeploymentWorkflow
     public IReadOnlyList<CompanionDeploymentProfile> Profiles { get; private set; } = [];
     public CompanionDeploymentPreview? Preview { get; private set; }
     public CompanionDeploymentRun? CurrentRun { get; private set; }
+    public bool IsCurrentRunTerminal => CurrentRun is not null && TerminalStatuses.Contains(CurrentRun.Status);
 
     public async Task LoadRepositoriesAsync(CancellationToken cancellationToken)
     {
@@ -77,6 +87,9 @@ public sealed class CompanionDeploymentWorkflow
     public async Task<CompanionDeploymentRun> RefreshDeploymentAsync(CancellationToken cancellationToken)
     {
         var run = CurrentRun ?? throw new InvalidOperationException("Start a deployment before requesting progress.");
+        if (IsCurrentRunTerminal)
+            return run;
+
         CurrentRun = await _api.GetDeploymentAsync(run.Id, cancellationToken).ConfigureAwait(false);
         return CurrentRun;
     }
