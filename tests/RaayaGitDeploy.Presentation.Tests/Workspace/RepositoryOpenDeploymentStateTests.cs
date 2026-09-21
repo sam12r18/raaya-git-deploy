@@ -62,6 +62,25 @@ public sealed class RepositoryOpenDeploymentStateTests
         Assert.Equal("Not a Git repository.", workspace.ErrorMessage);
     }
 
+    [Fact]
+    public async Task CancellingFolderPicker_PreservesWorkspaceAndDeploymentQueue()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "raaya-open-picker-cancel");
+        var git = new FakeGitRepositoryService();
+        var workspace = new RepositoryWorkspaceViewModel(git);
+        await workspace.OpenRepositoryAsync(root, CancellationToken.None);
+        var deployment = await CreateDeploymentAsync();
+        deployment.Queue.AddFile(Path.Combine(root, "app.js"));
+        var requestedBeforeCancel = git.ContextRequestedPath;
+        var coordinator = new RepositoryOpenCoordinator(new FakePicker(null), workspace, deployment);
+
+        await coordinator.OpenRepositoryAsync(CancellationToken.None);
+
+        Assert.Equal(root, workspace.RepositoryPath);
+        Assert.Single(deployment.Queue.Items);
+        Assert.Equal(requestedBeforeCancel, git.ContextRequestedPath);
+    }
+
     private static async Task<DeploymentWorkspaceViewModel> CreateDeploymentAsync()
     {
         var profile = new ServerProfile("prod", "Production", "example.test", 22, "deploy", "/srv/app", ServerAuthenticationMode.SshKey, "key:prod");
@@ -73,9 +92,9 @@ public sealed class RepositoryOpenDeploymentStateTests
         return deployment;
     }
 
-    private sealed class FakePicker(string path) : IRepositoryFolderPicker
+    private sealed class FakePicker(string? path) : IRepositoryFolderPicker
     {
-        public Task<string?> PickFolderAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(path);
+        public Task<string?> PickFolderAsync(CancellationToken cancellationToken) => Task.FromResult(path);
     }
 
     private sealed class FakeGitRepositoryService : IGitRepositoryService
