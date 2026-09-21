@@ -39,6 +39,12 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
 
     public Task LoadRepositoryAsync(string path, CancellationToken cancellationToken = default) => OpenRepositoryAsync(path, cancellationToken);
 
+    public Task RefreshCurrentRepositoryAsync(CancellationToken cancellationToken = default)
+    {
+        var path = GetRequiredRepositoryPath();
+        return OpenRepositoryAsync(path, cancellationToken);
+    }
+
     public async Task OpenRepositoryAsync(string path, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
