@@ -28,6 +28,26 @@ public sealed class RepositoryCommitWorkflowTests
     }
 
     [Fact]
+    public async Task UnstageAsync_RefreshesWorkspaceAndExposesUnstagedState()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var repository = new FakeRepositoryService { Staged = true };
+        var mutation = new FakeMutationService(repository);
+        var workspace = new RepositoryWorkspaceViewModel(repository);
+        await workspace.OpenRepositoryAsync("repo", cancellationToken);
+        var workflow = new RepositoryCommitWorkflow(mutation, workspace);
+        var change = Assert.Single(workspace.Changes);
+        Assert.True(change.IsStaged);
+
+        await workflow.UnstageAsync([change], cancellationToken);
+
+        var refreshed = Assert.Single(workspace.Changes);
+        Assert.False(refreshed.IsStaged);
+        Assert.True(refreshed.IsUnstaged);
+        Assert.Equal(1, mutation.UnstageCalls);
+    }
+
+    [Fact]
     public async Task StageAsync_RequiresExplicitSelectionBeforeMutation()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -45,6 +65,7 @@ public sealed class RepositoryCommitWorkflowTests
     {
         public const string NewSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         public int StageCalls { get; private set; }
+        public int UnstageCalls { get; private set; }
 
         public Task StageAsync(string repositoryPath, IReadOnlyList<string> repositoryRelativePaths, CancellationToken cancellationToken)
         {
@@ -55,6 +76,7 @@ public sealed class RepositoryCommitWorkflowTests
 
         public Task UnstageAsync(string repositoryPath, IReadOnlyList<string> repositoryRelativePaths, CancellationToken cancellationToken)
         {
+            UnstageCalls++;
             repository.Staged = false;
             return Task.CompletedTask;
         }
