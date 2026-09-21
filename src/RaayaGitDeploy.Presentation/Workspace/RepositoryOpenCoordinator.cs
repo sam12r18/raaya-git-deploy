@@ -28,8 +28,6 @@ public sealed class RepositoryOpenCoordinator
 
         try
         {
-            _viewModel.ClearError();
-
             // Reject repository switching before opening the native picker. An active deployment owns the
             // current repository/profile/queue snapshot, so presenting a picker would imply a switch can
             // proceed when it cannot safely do so.
@@ -55,11 +53,14 @@ public sealed class RepositoryOpenCoordinator
                 return;
             }
 
+            // Cancelling the native picker is not a repository operation. Preserve the complete current
+            // workspace state, including any diagnostic the user may still be reading.
             if (string.IsNullOrWhiteSpace(path))
             {
                 return;
             }
 
+            _viewModel.ClearError();
             var previousRepository = _viewModel.RepositoryPath;
             await _viewModel.OpenRepositoryAsync(path, cancellationToken);
 
