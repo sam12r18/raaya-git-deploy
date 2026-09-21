@@ -28,6 +28,24 @@ public sealed class CompanionShellStateTests
         Assert.True(shell.CanOpenDeployment);
     }
 
+    [Fact]
+    public async Task Shell_OnlyOpensHistoryDetailForLoadedRepositoryHistory()
+    {
+        var workflow = new CompanionDeploymentWorkflow(new FakeApi());
+        var shell = new CompanionShellState(workflow);
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await workflow.LoadRepositoriesAsync(cancellationToken);
+        await workflow.SelectRepositoryAsync("repo-1", cancellationToken);
+        await workflow.LoadHistoryAsync(cancellationToken);
+
+        shell.OpenHistory();
+        shell.OpenHistoryDetail("deploy-1");
+
+        Assert.Equal(CompanionShellScreen.HistoryDetail, shell.Screen);
+        Assert.Throws<InvalidOperationException>(() => shell.OpenHistoryDetail("foreign-deploy"));
+    }
+
     private sealed class FakeApi : ICompanionDeploymentApi
     {
         public Task<IReadOnlyList<CompanionRepository>> GetRepositoriesAsync(CancellationToken cancellationToken) =>
@@ -35,6 +53,11 @@ public sealed class CompanionShellStateTests
 
         public Task<IReadOnlyList<CompanionDeploymentProfile>> GetProfilesAsync(string repositoryId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanionDeploymentProfile>>([new("prod", "Production", "production", true)]);
+
+        public Task<IReadOnlyList<CompanionDeploymentRun>> GetDeploymentHistoryAsync(string repositoryId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CompanionDeploymentRun>>([
+                new("deploy-1", repositoryId, "prod", "succeeded", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null)
+            ]);
 
         public Task<CompanionDeploymentPreview> DryRunAsync(CompanionDeploymentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CompanionDeploymentRun> StartDeploymentAsync(string previewId, bool confirmed, CancellationToken cancellationToken) => throw new NotSupportedException();
