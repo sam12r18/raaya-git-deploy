@@ -10,11 +10,7 @@ public sealed class CompanionDeploymentWorkflow
 {
     private static readonly HashSet<string> TerminalStates = new(StringComparer.OrdinalIgnoreCase)
     {
-        "succeeded",
-        "failed",
-        "cancelled",
-        "canceled",
-        "blocked"
+        "succeeded", "failed", "cancelled", "canceled", "blocked"
     };
 
     private readonly ICompanionDeploymentApi _api;
@@ -44,7 +40,6 @@ public sealed class CompanionDeploymentWorkflow
     {
         SelectedRepository = Repositories.FirstOrDefault(item => item.Id == repositoryId)
             ?? throw new InvalidOperationException("Select an authorized repository returned by the companion agent.");
-
         Profiles = await _api.GetProfilesAsync(SelectedRepository.Id, cancellationToken).ConfigureAwait(false);
         SelectedProfile = null;
         Preview = null;
@@ -66,9 +61,7 @@ public sealed class CompanionDeploymentWorkflow
         if (paths.Count == 0 || paths.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException("Select at least one valid repository path before Dry Run.");
 
-        Preview = await _api.DryRunAsync(
-            new CompanionDeploymentRequest(repository.Id, profile.Id, paths, DryRun: true),
-            cancellationToken).ConfigureAwait(false);
+        Preview = await _api.DryRunAsync(new CompanionDeploymentRequest(repository.Id, profile.Id, paths, DryRun: true), cancellationToken).ConfigureAwait(false);
         CurrentRun = null;
         return Preview;
     }
@@ -92,5 +85,28 @@ public sealed class CompanionDeploymentWorkflow
 
         CurrentRun = await _api.GetDeploymentAsync(run.Id, cancellationToken).ConfigureAwait(false);
         return CurrentRun;
+    }
+
+    public async Task<CompanionDeploymentRun> PollUntilTerminalAsync(
+        int maxAttempts,
+        TimeSpan delay,
+        CancellationToken cancellationToken)
+    {
+        if (maxAttempts <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxAttempts), "Polling requires at least one attempt.");
+        if (delay < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(delay), "Polling delay cannot be negative.");
+        if (CurrentRun is null)
+            throw new InvalidOperationException("Start a deployment before polling progress.");
+
+        for (var attempt = 0; attempt < maxAttempts && !IsCurrentRunTerminal; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await RefreshDeploymentAsync(cancellationToken).ConfigureAwait(false);
+            if (!IsCurrentRunTerminal && attempt + 1 < maxAttempts && delay > TimeSpan.Zero)
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+        }
+
+        return CurrentRun!;
     }
 }
