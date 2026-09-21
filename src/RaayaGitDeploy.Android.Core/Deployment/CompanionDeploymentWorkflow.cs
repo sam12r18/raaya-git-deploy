@@ -25,6 +25,7 @@ public sealed class CompanionDeploymentWorkflow
     public IReadOnlyList<CompanionDeploymentRun> History { get; private set; } = [];
     public CompanionDeploymentPreview? Preview { get; private set; }
     public CompanionDeploymentRun? CurrentRun { get; private set; }
+    public CompanionDeploymentRun? SelectedHistoryRun { get; private set; }
     public bool IsCurrentRunTerminal => CurrentRun is not null && TerminalStates.Contains(CurrentRun.State);
 
     public async Task LoadRepositoriesAsync(CancellationToken cancellationToken)
@@ -36,6 +37,7 @@ public sealed class CompanionDeploymentWorkflow
         History = [];
         Preview = null;
         CurrentRun = null;
+        SelectedHistoryRun = null;
     }
 
     public async Task SelectRepositoryAsync(string repositoryId, CancellationToken cancellationToken)
@@ -47,6 +49,7 @@ public sealed class CompanionDeploymentWorkflow
         History = [];
         Preview = null;
         CurrentRun = null;
+        SelectedHistoryRun = null;
     }
 
     public void SelectProfile(string profileId)
@@ -62,13 +65,26 @@ public sealed class CompanionDeploymentWorkflow
         var repository = SelectedRepository ?? throw new InvalidOperationException("Select a repository before loading deployment history.");
         var history = await _api.GetDeploymentHistoryAsync(repository.Id, cancellationToken).ConfigureAwait(false);
 
-        // Treat the repository selected from the authorized agent list as a security boundary. A malformed
-        // or compromised response must not leak another repository's deployment metadata into this workflow.
         if (history.Any(run => !string.Equals(run.RepositoryId, repository.Id, StringComparison.Ordinal)))
             throw new InvalidOperationException("The companion agent returned deployment history for another repository.");
 
         History = history;
+        SelectedHistoryRun = null;
         return History;
+    }
+
+    public async Task<CompanionDeploymentRun> LoadHistoryDetailAsync(string deploymentId, CancellationToken cancellationToken)
+    {
+        var repository = SelectedRepository ?? throw new InvalidOperationException("Select a repository before loading deployment details.");
+        if (string.IsNullOrWhiteSpace(deploymentId) || !History.Any(run => string.Equals(run.Id, deploymentId, StringComparison.Ordinal)))
+            throw new InvalidOperationException("Select a deployment from the loaded repository history.");
+
+        var detail = await _api.GetDeploymentAsync(deploymentId, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(detail.RepositoryId, repository.Id, StringComparison.Ordinal))
+            throw new InvalidOperationException("The companion agent returned deployment details for another repository.");
+
+        SelectedHistoryRun = detail;
+        return detail;
     }
 
     public async Task<CompanionDeploymentPreview> DryRunAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken)
