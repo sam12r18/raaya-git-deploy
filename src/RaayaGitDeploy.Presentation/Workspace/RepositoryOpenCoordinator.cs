@@ -50,6 +50,17 @@ public sealed class RepositoryOpenCoordinator
                 return;
             }
 
+            // Do not let the workspace move to another repository while an execution is still using
+            // the current repository/profile/queue snapshot. ResetForRepositoryChange also guards this,
+            // but checking before OpenRepositoryAsync avoids switching the Git workspace first and only
+            // then discovering that deployment state cannot safely follow it.
+            if (_deployment?.IsExecuting == true)
+            {
+                _viewModel.ReportError(new InvalidOperationException(
+                    "Wait for the active deployment to finish before switching repositories."));
+                return;
+            }
+
             var previousRepository = _viewModel.RepositoryPath;
             await _viewModel.OpenRepositoryAsync(path, cancellationToken);
 
