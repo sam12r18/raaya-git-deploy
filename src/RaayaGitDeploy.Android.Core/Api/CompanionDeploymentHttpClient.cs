@@ -20,6 +20,8 @@ public sealed class CompanionDeploymentHttpClient : ICompanionDeploymentApi
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _tokenStore = tokenStore ?? throw new ArgumentNullException(nameof(tokenStore));
+        _httpClient.BaseAddress = CompanionEndpointPolicy.RequireSecureBaseAddress(
+            _httpClient.BaseAddress ?? throw new InvalidOperationException("Companion agent base endpoint is required."));
     }
 
     public Task<IReadOnlyList<CompanionRepository>> GetRepositoriesAsync(CancellationToken cancellationToken) =>
