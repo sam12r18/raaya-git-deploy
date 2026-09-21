@@ -46,9 +46,11 @@ public sealed class DeploymentWorkspaceViewModel
         _previewProfile = Servers.SelectedProfile;
     }
 
-    public void PrepareRetry(DeploymentHistoryEntry entry)
+    public void PrepareRetry(DeploymentHistoryEntry entry, string repositoryRoot)
     {
         ArgumentNullException.ThrowIfNull(entry);
+        if (string.IsNullOrWhiteSpace(repositoryRoot))
+            throw new InvalidOperationException("Open the repository associated with this deployment before preparing a retry.");
         if (entry.Succeeded)
             throw new InvalidOperationException("Successful deployments do not need recovery.");
 
@@ -64,6 +66,10 @@ public sealed class DeploymentWorkspaceViewModel
 
         if (retryablePaths.Length == 0)
             throw new InvalidOperationException("This failed deployment has no upload operations that can be safely re-queued automatically.");
+
+        var normalizedRoot = Path.GetFullPath(repositoryRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (retryablePaths.Any(path => !Path.GetFullPath(path).StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("This deployment history contains files outside the currently open repository. Open the original repository before preparing a retry.");
 
         Queue.Clear();
         foreach (var localPath in retryablePaths)
