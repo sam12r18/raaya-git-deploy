@@ -8,7 +8,7 @@ public sealed class RepositoryCommitWorkflowTests
     [Fact]
     public async Task StageAndCommit_RefreshWorkspaceAndExposeNewHead()
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         var repository = new FakeRepositoryService();
         var mutation = new FakeMutationService(repository);
         var workspace = new RepositoryWorkspaceViewModel(repository);
@@ -17,7 +17,10 @@ public sealed class RepositoryCommitWorkflowTests
         var change = Assert.Single(workspace.Changes);
 
         await workflow.StageAsync([change], cancellationToken);
-        Assert.True(Assert.Single(workspace.Changes).IsStaged);
+        var staged = Assert.Single(workspace.Changes);
+        Assert.True(staged.IsStaged);
+        Assert.False(staged.IsUnstaged);
+        Assert.Equal(1, mutation.StageCalls);
 
         var sha = await workflow.CommitAsync("ship real commit", cancellationToken);
 
@@ -30,7 +33,7 @@ public sealed class RepositoryCommitWorkflowTests
     [Fact]
     public async Task UnstageAsync_RefreshesWorkspaceAndExposesUnstagedState()
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         var repository = new FakeRepositoryService { Staged = true };
         var mutation = new FakeMutationService(repository);
         var workspace = new RepositoryWorkspaceViewModel(repository);
@@ -50,7 +53,7 @@ public sealed class RepositoryCommitWorkflowTests
     [Fact]
     public async Task StageAsync_RequiresExplicitSelectionBeforeMutation()
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         var repository = new FakeRepositoryService();
         var mutation = new FakeMutationService(repository);
         var workspace = new RepositoryWorkspaceViewModel(repository);
