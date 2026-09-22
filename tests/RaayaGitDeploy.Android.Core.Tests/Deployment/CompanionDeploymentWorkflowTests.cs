@@ -20,6 +20,28 @@ public sealed class CompanionDeploymentWorkflowTests
     }
 
     [Fact]
+    public async Task DryRun_RejectsPreviewFromAnotherRepository_AndClearsPreviewState()
+    {
+        var api = new FakeApi { ReturnForeignPreviewRepository = true };
+        var workflow = new CompanionDeploymentWorkflow(api);
+        await PrepareAsync(workflow);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken));
+        Assert.Null(workflow.Preview);
+        Assert.Null(workflow.CurrentRun);
+    }
+
+    [Fact]
+    public async Task DryRun_RejectsPreviewFromAnotherProfile_AndClearsPreviewState()
+    {
+        var api = new FakeApi { ReturnForeignPreviewProfile = true };
+        var workflow = new CompanionDeploymentWorkflow(api);
+        await PrepareAsync(workflow);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken));
+        Assert.Null(workflow.Preview);
+        Assert.Null(workflow.CurrentRun);
+    }
+
+    [Fact]
     public async Task LoadHistory_UsesSelectedRepositoryAndKeepsOnlyScopedRuns()
     {
         var api = new FakeApi();
@@ -126,6 +148,8 @@ public sealed class CompanionDeploymentWorkflowTests
         public bool ReturnForeignHistory { get; init; }
         public bool ReturnForeignStartRun { get; init; }
         public bool ReturnForeignRefreshRun { get; init; }
+        public bool ReturnForeignPreviewRepository { get; init; }
+        public bool ReturnForeignPreviewProfile { get; init; }
 
         public Task<IReadOnlyList<CompanionRepository>> GetRepositoriesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanionRepository>>([new("repo-1", "Repo", "main", "abc123", true)]);
@@ -145,7 +169,9 @@ public sealed class CompanionDeploymentWorkflowTests
         public Task<CompanionDeploymentPreview> DryRunAsync(CompanionDeploymentRequest request, CancellationToken cancellationToken)
         {
             LastRequest = request;
-            return Task.FromResult(new CompanionDeploymentPreview("preview-1", request.RepositoryId, request.ProfileId, [new("src/app.cs", "/app/src/app.cs", "upload")], DateTimeOffset.UtcNow));
+            var repositoryId = ReturnForeignPreviewRepository ? "repo-2" : request.RepositoryId;
+            var profileId = ReturnForeignPreviewProfile ? "staging" : request.ProfileId;
+            return Task.FromResult(new CompanionDeploymentPreview("preview-1", repositoryId, profileId, [new("src/app.cs", "/app/src/app.cs", "upload")], DateTimeOffset.UtcNow));
         }
 
         public Task<CompanionDeploymentRun> StartDeploymentAsync(string previewId, bool confirmed, CancellationToken cancellationToken)
