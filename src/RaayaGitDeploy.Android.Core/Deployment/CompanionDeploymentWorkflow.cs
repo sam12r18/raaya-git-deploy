@@ -82,7 +82,7 @@ public sealed class CompanionDeploymentWorkflow
 
         SelectedHistoryRun = null;
         var detail = await _api.GetDeploymentAsync(deploymentId, cancellationToken).ConfigureAwait(false);
-        EnsureRunScope(detail, repository.Id);
+        EnsureRunScope(detail, repository.Id, expectedProfileId: null);
 
         SelectedHistoryRun = detail;
         return detail;
@@ -112,7 +112,7 @@ public sealed class CompanionDeploymentWorkflow
             throw new InvalidOperationException("This deployment profile requires explicit confirmation.");
 
         var run = await _api.StartDeploymentAsync(preview.Id, confirmed, cancellationToken).ConfigureAwait(false);
-        EnsureRunScope(run, repository.Id);
+        EnsureRunScope(run, repository.Id, profile.Id);
         CurrentRun = run;
         return run;
     }
@@ -121,11 +121,12 @@ public sealed class CompanionDeploymentWorkflow
     {
         var run = CurrentRun ?? throw new InvalidOperationException("Start a deployment before requesting progress.");
         var repository = SelectedRepository ?? throw new InvalidOperationException("Select a repository before requesting progress.");
+        var profile = SelectedProfile ?? throw new InvalidOperationException("Select a deployment profile before requesting progress.");
         if (IsCurrentRunTerminal)
             return run;
 
         var refreshed = await _api.GetDeploymentAsync(run.Id, cancellationToken).ConfigureAwait(false);
-        EnsureRunScope(refreshed, repository.Id);
+        EnsureRunScope(refreshed, repository.Id, profile.Id);
         CurrentRun = refreshed;
         return refreshed;
     }
@@ -157,9 +158,11 @@ public sealed class CompanionDeploymentWorkflow
             throw new InvalidOperationException("The companion agent returned a Dry Run preview outside the selected repository or profile scope.");
     }
 
-    private static void EnsureRunScope(CompanionDeploymentRun run, string repositoryId)
+    private static void EnsureRunScope(CompanionDeploymentRun run, string repositoryId, string? expectedProfileId)
     {
         if (!string.Equals(run.RepositoryId, repositoryId, StringComparison.Ordinal))
             throw new InvalidOperationException("The companion agent returned a deployment for another repository.");
+        if (expectedProfileId is not null && !string.Equals(run.ProfileId, expectedProfileId, StringComparison.Ordinal))
+            throw new InvalidOperationException("The companion agent returned a deployment for another profile.");
     }
 }
