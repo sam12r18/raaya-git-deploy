@@ -8,7 +8,7 @@ public sealed class RepositoryOpenCoordinatorTests
     [Fact]
     public async Task OpenRepositoryAsync_SelectedFolder_LoadsRepository()
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         var git = new FakeGitRepositoryService();
         var viewModel = new RepositoryWorkspaceViewModel(git);
         var picker = new FakeRepositoryFolderPicker(@"C:\work\repo");
@@ -23,7 +23,7 @@ public sealed class RepositoryOpenCoordinatorTests
     [Fact]
     public async Task OpenRepositoryAsync_CancelledSelection_DoesNotCallGit()
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         var git = new FakeGitRepositoryService();
         var viewModel = new RepositoryWorkspaceViewModel(git);
         var coordinator = new RepositoryOpenCoordinator(
@@ -37,9 +37,9 @@ public sealed class RepositoryOpenCoordinatorTests
     }
 
     [Fact]
-    public async Task OpenRepositoryAsync_NewPickerAttempt_ClearsStaleDiagnostic()
+    public async Task OpenRepositoryAsync_CancelledPicker_PreservesExistingDiagnostic()
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         var git = new FakeGitRepositoryService();
         var viewModel = new RepositoryWorkspaceViewModel(git);
         viewModel.ReportError(new InvalidOperationException("Previous picker failure."));
@@ -49,14 +49,14 @@ public sealed class RepositoryOpenCoordinatorTests
 
         await coordinator.OpenRepositoryAsync(cancellationToken);
 
-        Assert.Null(viewModel.ErrorMessage);
+        Assert.Equal("Previous picker failure.", viewModel.ErrorMessage);
         Assert.Null(git.ContextRequestedPath);
     }
 
     [Fact]
     public async Task OpenRepositoryAsync_PickerFails_ReportsDiagnosticWithoutCallingGit()
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         var git = new FakeGitRepositoryService();
         var viewModel = new RepositoryWorkspaceViewModel(git);
         var coordinator = new RepositoryOpenCoordinator(
@@ -72,7 +72,7 @@ public sealed class RepositoryOpenCoordinatorTests
     [Fact]
     public async Task OpenRepositoryAsync_WhilePickerIsOpen_DoesNotOpenSecondPicker()
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         var git = new FakeGitRepositoryService();
         var viewModel = new RepositoryWorkspaceViewModel(git);
         var picker = new BlockingRepositoryFolderPicker();
