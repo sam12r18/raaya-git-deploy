@@ -95,9 +95,12 @@ public sealed class CompanionDeploymentWorkflow
         if (paths.Count == 0 || paths.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException("Select at least one valid repository path before Dry Run.");
 
-        Preview = await _api.DryRunAsync(new CompanionDeploymentRequest(repository.Id, profile.Id, paths, DryRun: true), cancellationToken).ConfigureAwait(false);
+        Preview = null;
         CurrentRun = null;
-        return Preview;
+        var preview = await _api.DryRunAsync(new CompanionDeploymentRequest(repository.Id, profile.Id, paths, DryRun: true), cancellationToken).ConfigureAwait(false);
+        EnsurePreviewScope(preview, repository.Id, profile.Id);
+        Preview = preview;
+        return preview;
     }
 
     public async Task<CompanionDeploymentRun> StartDeploymentAsync(bool confirmed, CancellationToken cancellationToken)
@@ -127,10 +130,7 @@ public sealed class CompanionDeploymentWorkflow
         return refreshed;
     }
 
-    public async Task<CompanionDeploymentRun> PollUntilTerminalAsync(
-        int maxAttempts,
-        TimeSpan delay,
-        CancellationToken cancellationToken)
+    public async Task<CompanionDeploymentRun> PollUntilTerminalAsync(int maxAttempts, TimeSpan delay, CancellationToken cancellationToken)
     {
         if (maxAttempts <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxAttempts), "Polling requires at least one attempt.");
@@ -148,6 +148,13 @@ public sealed class CompanionDeploymentWorkflow
         }
 
         return CurrentRun!;
+    }
+
+    private static void EnsurePreviewScope(CompanionDeploymentPreview preview, string repositoryId, string profileId)
+    {
+        if (!string.Equals(preview.RepositoryId, repositoryId, StringComparison.Ordinal) ||
+            !string.Equals(preview.ProfileId, profileId, StringComparison.Ordinal))
+            throw new InvalidOperationException("The companion agent returned a Dry Run preview outside the selected repository or profile scope.");
     }
 
     private static void EnsureRunScope(CompanionDeploymentRun run, string repositoryId)
