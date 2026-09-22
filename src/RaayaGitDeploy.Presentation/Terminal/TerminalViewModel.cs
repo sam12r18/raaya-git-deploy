@@ -5,6 +5,8 @@ namespace RaayaGitDeploy.Presentation.Terminal;
 public sealed class TerminalViewModel : IAsyncDisposable
 {
     private readonly ITerminalSessionFactory _sessionFactory;
+    private readonly object _outputGate = new();
+    private readonly Queue<string> _pendingOutput = new();
     private ITerminalSession? _session;
     private string? _repositoryPath;
 
@@ -21,12 +23,10 @@ public sealed class TerminalViewModel : IAsyncDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
         if (_session is not null)
-        {
             throw new InvalidOperationException("Use SwitchRepositoryAsync while a terminal session exists.");
-        }
 
         _repositoryPath = repositoryPath;
-        Output = string.Empty;
+        ResetOutput();
         ExitCode = null;
     }
 
@@ -35,26 +35,18 @@ public sealed class TerminalViewModel : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
         await ReleaseSessionAsync(stopRunning: true, cancellationToken).ConfigureAwait(false);
         _repositoryPath = repositoryPath;
-        Output = string.Empty;
+        ResetOutput();
         ExitCode = null;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_repositoryPath))
-        {
             throw new InvalidOperationException("Select a repository before starting the terminal.");
-        }
-
         if (IsRunning)
-        {
             throw new InvalidOperationException("The terminal is already running.");
-        }
-
         if (_session is not null)
-        {
             await ReleaseSessionAsync(stopRunning: false, cancellationToken).ConfigureAwait(false);
-        }
 
         var session = _sessionFactory.Create();
         Attach(session);
@@ -77,40 +69,36 @@ public sealed class TerminalViewModel : IAsyncDisposable
     public Task SendAsync(string input, CancellationToken cancellationToken)
     {
         if (!IsRunning || _session is null)
-        {
             throw new InvalidOperationException("Start the terminal before sending input.");
-        }
-
         return _session.WriteAsync(input, cancellationToken);
     }
 
     public Task ResizeAsync(int columns, int rows, CancellationToken cancellationToken)
     {
         if (!IsRunning || _session is null)
-        {
             throw new InvalidOperationException("Start the terminal before resizing it.");
-        }
-
         return _session.ResizeAsync(columns, rows, cancellationToken);
+    }
+
+    public string DrainPendingOutput()
+    {
+        lock (_outputGate)
+        {
+            if (_pendingOutput.Count == 0) return string.Empty;
+            var chunks = _pendingOutput.ToArray();
+            _pendingOutput.Clear();
+            return string.Concat(chunks);
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_session is null)
-        {
-            return;
-        }
-
-        if (_session.State == TerminalSessionState.Running)
-        {
+        if (_session?.State == TerminalSessionState.Running)
             await _session.StopAsync(cancellationToken).ConfigureAwait(false);
-        }
     }
 
-    public async ValueTask DisposeAsync()
-    {
+    public async ValueTask DisposeAsync() =>
         await ReleaseSessionAsync(stopRunning: true, CancellationToken.None).ConfigureAwait(false);
-    }
 
     private void Attach(ITerminalSession session)
     {
@@ -126,27 +114,30 @@ public sealed class TerminalViewModel : IAsyncDisposable
 
     private void OnOutputReceived(object? sender, string text)
     {
-        Output += text;
+        lock (_outputGate)
+        {
+            Output += text;
+            _pendingOutput.Enqueue(text);
+        }
     }
 
-    private void OnExited(object? sender, int exitCode)
+    private void OnExited(object? sender, int exitCode) => ExitCode = exitCode;
+
+    private void ResetOutput()
     {
-        ExitCode = exitCode;
+        lock (_outputGate)
+        {
+            Output = string.Empty;
+            _pendingOutput.Clear();
+        }
     }
 
     private async Task ReleaseSessionAsync(bool stopRunning, CancellationToken cancellationToken)
     {
         var session = _session;
-        if (session is null)
-        {
-            return;
-        }
-
+        if (session is null) return;
         if (stopRunning && session.State == TerminalSessionState.Running)
-        {
             await session.StopAsync(cancellationToken).ConfigureAwait(false);
-        }
-
         Detach(session);
         _session = null;
         await session.DisposeAsync().ConfigureAwait(false);
