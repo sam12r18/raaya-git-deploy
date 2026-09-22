@@ -63,9 +63,6 @@ public sealed class CompanionDeploymentWorkflow
     public async Task<IReadOnlyList<CompanionDeploymentRun>> LoadHistoryAsync(CancellationToken cancellationToken)
     {
         var repository = SelectedRepository ?? throw new InvalidOperationException("Select a repository before loading deployment history.");
-
-        // History is presentation state, not a cache of trusted authorization data. Clear it before a
-        // network reload so an offline/error response can never leave another, now-stale timeline visible.
         History = [];
         SelectedHistoryRun = null;
         var history = await _api.GetDeploymentHistoryAsync(repository.Id, cancellationToken).ConfigureAwait(false);
@@ -83,12 +80,9 @@ public sealed class CompanionDeploymentWorkflow
         if (string.IsNullOrWhiteSpace(deploymentId) || !History.Any(run => string.Equals(run.Id, deploymentId, StringComparison.Ordinal)))
             throw new InvalidOperationException("Select a deployment from the loaded repository history.");
 
-        // Never leave a previously selected detail visible while a different detail is being resolved.
-        // If the agent rejects the request or violates repository scoping, presentation sees no stale detail.
         SelectedHistoryRun = null;
         var detail = await _api.GetDeploymentAsync(deploymentId, cancellationToken).ConfigureAwait(false);
-        if (!string.Equals(detail.RepositoryId, repository.Id, StringComparison.Ordinal))
-            throw new InvalidOperationException("The companion agent returned deployment details for another repository.");
+        EnsureRunScope(detail, repository.Id);
 
         SelectedHistoryRun = detail;
         return detail;
@@ -109,22 +103,28 @@ public sealed class CompanionDeploymentWorkflow
     public async Task<CompanionDeploymentRun> StartDeploymentAsync(bool confirmed, CancellationToken cancellationToken)
     {
         var preview = Preview ?? throw new InvalidOperationException("Run and review Dry Run before deployment.");
+        var repository = SelectedRepository ?? throw new InvalidOperationException("Select a repository before deployment.");
         var profile = SelectedProfile ?? throw new InvalidOperationException("Select a deployment profile before deployment.");
         if (profile.RequiresConfirmation && !confirmed)
             throw new InvalidOperationException("This deployment profile requires explicit confirmation.");
 
-        CurrentRun = await _api.StartDeploymentAsync(preview.Id, confirmed, cancellationToken).ConfigureAwait(false);
-        return CurrentRun;
+        var run = await _api.StartDeploymentAsync(preview.Id, confirmed, cancellationToken).ConfigureAwait(false);
+        EnsureRunScope(run, repository.Id);
+        CurrentRun = run;
+        return run;
     }
 
     public async Task<CompanionDeploymentRun> RefreshDeploymentAsync(CancellationToken cancellationToken)
     {
         var run = CurrentRun ?? throw new InvalidOperationException("Start a deployment before requesting progress.");
+        var repository = SelectedRepository ?? throw new InvalidOperationException("Select a repository before requesting progress.");
         if (IsCurrentRunTerminal)
             return run;
 
-        CurrentRun = await _api.GetDeploymentAsync(run.Id, cancellationToken).ConfigureAwait(false);
-        return CurrentRun;
+        var refreshed = await _api.GetDeploymentAsync(run.Id, cancellationToken).ConfigureAwait(false);
+        EnsureRunScope(refreshed, repository.Id);
+        CurrentRun = refreshed;
+        return refreshed;
     }
 
     public async Task<CompanionDeploymentRun> PollUntilTerminalAsync(
@@ -148,5 +148,11 @@ public sealed class CompanionDeploymentWorkflow
         }
 
         return CurrentRun!;
+    }
+
+    private static void EnsureRunScope(CompanionDeploymentRun run, string repositoryId)
+    {
+        if (!string.Equals(run.RepositoryId, repositoryId, StringComparison.Ordinal))
+            throw new InvalidOperationException("The companion agent returned a deployment for another repository.");
     }
 }
