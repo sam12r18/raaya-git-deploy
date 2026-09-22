@@ -61,6 +61,12 @@ public sealed class CompanionDeploymentHttpClient : ICompanionDeploymentApi
             throw new CompanionAuthenticationRequiredException();
         }
 
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            var retryAfter = response.Headers.RetryAfter?.Delta;
+            throw new CompanionRateLimitedException(retryAfter);
+        }
+
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Companion API returned an empty response.");
@@ -79,4 +85,9 @@ public sealed class CompanionDeploymentHttpClient : ICompanionDeploymentApi
 public sealed class CompanionAuthenticationRequiredException : InvalidOperationException
 {
     public CompanionAuthenticationRequiredException() : base("A valid companion session is required.") { }
+}
+
+public sealed class CompanionRateLimitedException(TimeSpan? retryAfter) : InvalidOperationException("The companion agent is temporarily rate limited.")
+{
+    public TimeSpan? RetryAfter { get; } = retryAfter;
 }
