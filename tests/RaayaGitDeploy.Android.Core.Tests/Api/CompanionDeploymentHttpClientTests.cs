@@ -39,6 +39,22 @@ public sealed class CompanionDeploymentHttpClientTests
     }
 
     [Fact]
+    public async Task GetRepositoriesAsync_RateLimited_PreservesSessionAndExposesRetryDelay()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.TooManyRequests, "{}", TimeSpan.FromSeconds(30));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://agent.example/") };
+        var tokens = new FakeAccessTokenStore("session-token");
+        var client = new CompanionDeploymentHttpClient(http, tokens);
+
+        var error = await Assert.ThrowsAsync<CompanionRateLimitedException>(() =>
+            client.GetRepositoriesAsync(CancellationToken.None));
+
+        Assert.Equal(TimeSpan.FromSeconds(30), error.RetryAfter);
+        Assert.False(tokens.Cleared);
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    [Fact]
     public async Task GetRepositoriesAsync_WithoutSession_DoesNotCallAgent()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK, "[]");
@@ -97,7 +113,7 @@ public sealed class CompanionDeploymentHttpClientTests
         public Task ClearAsync(CancellationToken cancellationToken) { Cleared = true; return Task.CompletedTask; }
     }
 
-    private sealed class RecordingHandler(HttpStatusCode statusCode, string body) : HttpMessageHandler
+    private sealed class RecordingHandler(HttpStatusCode statusCode, string body, TimeSpan? retryAfter = null) : HttpMessageHandler
     {
         public int CallCount { get; private set; }
         public string? AuthorizationScheme { get; private set; }
@@ -110,10 +126,13 @@ public sealed class CompanionDeploymentHttpClientTests
             AuthorizationScheme = request.Headers.Authorization?.Scheme;
             AuthorizationParameter = request.Headers.Authorization?.Parameter;
             RequestUri = request.RequestUri;
-            return Task.FromResult(new HttpResponseMessage(statusCode)
+            var response = new HttpResponseMessage(statusCode)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
-            });
+            };
+            if (retryAfter is not null)
+                response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(retryAfter.Value);
+            return Task.FromResult(response);
         }
     }
 }
