@@ -6,9 +6,9 @@ namespace RaayaGitDeploy.Presentation.Tests.Workspace;
 public sealed class RepositoryWorkspaceStaleRepositoryTests
 {
     [Fact]
-    public async Task OpenRepositoryAsync_FailureClearsPreviouslyLoadedRepositoryState()
+    public async Task OpenRepositoryAsync_FailedSwitch_PreservesPreviouslyLoadedRepositoryState()
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        var cancellationToken = CancellationToken.None;
         var service = new SwitchingGitRepositoryService();
         var viewModel = new RepositoryWorkspaceViewModel(service);
 
@@ -19,12 +19,13 @@ public sealed class RepositoryWorkspaceStaleRepositoryTests
         service.ContextException = new InvalidOperationException("not a git repository");
         await viewModel.OpenRepositoryAsync(@"I:\Projects\broken", cancellationToken);
 
-        Assert.Null(viewModel.RepositoryPath);
-        Assert.Null(viewModel.BranchName);
-        Assert.Null(viewModel.HeadSha);
+        Assert.Equal(@"I:\Projects\first", viewModel.RepositoryPath);
+        Assert.Equal("main", viewModel.BranchName);
+        Assert.Equal("0123456789abcdef0123456789abcdef01234567", viewModel.HeadSha);
         Assert.Null(viewModel.BaseRef);
         Assert.Null(viewModel.SelectedDiffText);
-        Assert.Empty(viewModel.Changes);
+        Assert.Single(viewModel.Changes);
+        Assert.Equal("src/App.cs", viewModel.Changes[0].Path);
         Assert.Equal("not a git repository", viewModel.ErrorMessage);
         Assert.False(viewModel.IsBusy);
     }
