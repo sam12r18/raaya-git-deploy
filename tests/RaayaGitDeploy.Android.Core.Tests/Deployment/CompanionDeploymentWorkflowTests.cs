@@ -87,6 +87,17 @@ public sealed class CompanionDeploymentWorkflowTests
     }
 
     [Fact]
+    public async Task StartDeployment_RejectsRunFromAnotherProfile()
+    {
+        var api = new FakeApi { ReturnForeignStartProfile = true };
+        var workflow = new CompanionDeploymentWorkflow(api);
+        await PrepareAsync(workflow);
+        await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken));
+        Assert.Null(workflow.CurrentRun);
+    }
+
+    [Fact]
     public async Task RefreshDeployment_UsesAgentRunIdAndStopsPollingAfterTerminalResult()
     {
         var api = new FakeApi();
@@ -108,6 +119,18 @@ public sealed class CompanionDeploymentWorkflowTests
     public async Task RefreshDeployment_RejectsRunFromAnotherRepository_AndPreservesCurrentRun()
     {
         var api = new FakeApi { ReturnForeignRefreshRun = true };
+        var workflow = new CompanionDeploymentWorkflow(api);
+        await PrepareAsync(workflow);
+        await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
+        var started = await workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.RefreshDeploymentAsync(TestContext.Current.CancellationToken));
+        Assert.Same(started, workflow.CurrentRun);
+    }
+
+    [Fact]
+    public async Task RefreshDeployment_RejectsRunFromAnotherProfile_AndPreservesCurrentRun()
+    {
+        var api = new FakeApi { ReturnForeignRefreshProfile = true };
         var workflow = new CompanionDeploymentWorkflow(api);
         await PrepareAsync(workflow);
         await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
@@ -147,7 +170,9 @@ public sealed class CompanionDeploymentWorkflowTests
         public bool KeepRunning { get; init; }
         public bool ReturnForeignHistory { get; init; }
         public bool ReturnForeignStartRun { get; init; }
+        public bool ReturnForeignStartProfile { get; init; }
         public bool ReturnForeignRefreshRun { get; init; }
+        public bool ReturnForeignRefreshProfile { get; init; }
         public bool ReturnForeignPreviewRepository { get; init; }
         public bool ReturnForeignPreviewProfile { get; init; }
 
@@ -178,7 +203,8 @@ public sealed class CompanionDeploymentWorkflowTests
         {
             StartCalls++;
             var repositoryId = ReturnForeignStartRun ? "repo-2" : "repo-1";
-            return Task.FromResult(new CompanionDeploymentRun("run-1", repositoryId, "prod", "queued", DateTimeOffset.UtcNow, null, null));
+            var profileId = ReturnForeignStartProfile ? "staging" : "prod";
+            return Task.FromResult(new CompanionDeploymentRun("run-1", repositoryId, profileId, "queued", DateTimeOffset.UtcNow, null, null));
         }
 
         public Task<CompanionDeploymentRun> GetDeploymentAsync(string deploymentId, CancellationToken cancellationToken)
@@ -187,7 +213,8 @@ public sealed class CompanionDeploymentWorkflowTests
             LastDeploymentId = deploymentId;
             var state = KeepRunning ? "running" : "succeeded";
             var repositoryId = ReturnForeignRefreshRun ? "repo-2" : "repo-1";
-            return Task.FromResult(new CompanionDeploymentRun(deploymentId, repositoryId, "prod", state, DateTimeOffset.UtcNow, KeepRunning ? null : DateTimeOffset.UtcNow, null));
+            var profileId = ReturnForeignRefreshProfile ? "staging" : "prod";
+            return Task.FromResult(new CompanionDeploymentRun(deploymentId, repositoryId, profileId, state, DateTimeOffset.UtcNow, KeepRunning ? null : DateTimeOffset.UtcNow, null));
         }
     }
 }
