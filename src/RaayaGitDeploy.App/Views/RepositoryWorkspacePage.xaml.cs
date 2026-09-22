@@ -113,7 +113,16 @@ public sealed partial class RepositoryWorkspacePage : Page
     private async void TerminalStart_Click(object sender,RoutedEventArgs e){try{if(string.IsNullOrWhiteSpace(ViewModel.RepositoryPath))throw new InvalidOperationException("Open a repository before starting the terminal.");if(!string.Equals(_terminalRepository,ViewModel.RepositoryPath,StringComparison.OrdinalIgnoreCase)){await _terminal.SwitchRepositoryAsync(ViewModel.RepositoryPath,CancellationToken.None);_terminalRepository=ViewModel.RepositoryPath;}await _terminal.StartAsync(CancellationToken.None);RefreshTerminalSurface();}catch(Exception ex){ShowError(ex.Message);}}
     private async void TerminalSend_Click(object sender,RoutedEventArgs e){try{if(string.IsNullOrWhiteSpace(TerminalInput.Text))return;var command=TerminalInput.Text;TerminalInput.Text=string.Empty;await _terminal.SendAsync(command,CancellationToken.None);}catch(Exception ex){ShowError(ex.Message);}}
     private async void TerminalStop_Click(object sender,RoutedEventArgs e){try{await _terminal.StopAsync(CancellationToken.None);RefreshTerminalSurface();}catch(Exception ex){ShowError(ex.Message);}}
-    private void RefreshTerminalSurface(){if(TerminalOutput is null)return;if(TerminalOutput.Text!=_terminal.Output)TerminalOutput.Text=_terminal.Output;TerminalState.Text=_terminal.IsRunning?"Running":_terminal.ExitCode is int code?$"Exited ({code})":"Stopped";}
+    private void RefreshTerminalSurface()
+    {
+        if (TerminalOutput is null) return;
+        if (TerminalOutput.Text != _terminal.Output)
+        {
+            TerminalOutput.Text = _terminal.Output;
+            TerminalScrollViewer.ChangeView(null, TerminalScrollViewer.ScrollableHeight, null, disableAnimation: true);
+        }
+        TerminalState.Text = _terminal.IsRunning ? "Running" : _terminal.ExitCode is int code ? $"Exited ({code})" : "Stopped";
+    }
     private void ChangesList_SelectionChanged(object sender,SelectionChangedEventArgs e){if(!ViewModel.IsBusy&&ChangesList.SelectedItem is ChangeItemViewModel item)_=ViewModel.LoadDiffAsync(item,CancellationToken.None);}
     private async void CommitsList_SelectionChanged(object sender,SelectionChangedEventArgs e){if(!ViewModel.IsBusy&&CommitsList.SelectedItem is GitCommitInfo commit){CommitFilesList.SelectedItem=null;await ViewModel.SelectCommitAsync(commit,CancellationToken.None);}}
     private async void CommitFilesList_SelectionChanged(object sender,SelectionChangedEventArgs e){if(!ViewModel.IsBusy&&CommitFilesList.SelectedItem is GitChange file)await ViewModel.SelectCommitFileAsync(file,CancellationToken.None);}
