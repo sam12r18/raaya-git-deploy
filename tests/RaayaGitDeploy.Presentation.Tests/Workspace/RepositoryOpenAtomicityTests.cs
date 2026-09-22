@@ -37,7 +37,7 @@ public sealed class RepositoryOpenAtomicityTests
 
         public Task<IReadOnlyList<GitWorkingTreeChange>> GetWorkingTreeChangesAsync(string repositoryPath, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<GitWorkingTreeChange>>([
-                new GitWorkingTreeChange("src/app.cs", GitChangeKind.Modified, IsStaged: false, IsUnstaged: true)
+                new GitWorkingTreeChange("src/app.cs", GitChangeKind.Modified, OriginalPath: null, IsStaged: false, IsUnstaged: true)
             ]);
 
         public Task<IReadOnlyList<GitChange>> GetChangesSinceAsync(string repositoryPath, GitComparisonRequest request, CancellationToken cancellationToken) =>
