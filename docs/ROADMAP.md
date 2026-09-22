@@ -41,6 +41,11 @@ Requires validation before becoming part of the stable product contract.
 - File-level selection
 - File-level review state
 
+### Active Development
+
+- IDE-style commit browser: repository/branch hierarchy, commit subject, author, author date/time, changed paths and commit diff in a dense master/detail workspace
+- Commit metadata columns and filtering comparable to modern IDE Git-log workflows
+
 ### Extension Candidates
 
 - Commit graph
@@ -82,6 +87,12 @@ Requires validation before becoming part of the stable product contract.
 - Repository-aware working directory
 - PowerShell command execution
 - Saved commands
+
+### Active Development
+
+- Replace the current output-plus-command-box surface with an IDE-grade interactive terminal experience
+- Native prompt/input behavior, ANSI/VT rendering, selection/copy/paste, scrolling, keyboard shortcuts and resize propagation
+- Keep repository-aware working directory and explicit process lifecycle
 
 ### Extension Candidates
 
@@ -127,10 +138,15 @@ Requires validation before becoming part of the stable product contract.
 - SSH key authentication
 - SSH host-key verification
 
+### Active Development
+
+- FTP transport for cPanel/shared-hosting deployment
+- FTPS support where the hosting provider exposes TLS
+- Server profile protocol selector so SFTP/SSH and FTP/FTPS share deployment planning/history contracts while transport-specific fields remain isolated
+- Connection testing and actionable protocol-specific errors
+
 ### Extension Candidates
 
-- FTP
-- FTPS
 - SCP
 - Hosting-panel APIs
 - Custom transport integrations
@@ -188,6 +204,22 @@ New transports should implement the transport contract without leaking transport
 - Dense information layout
 - Main repository workspace
 - Changes / Queue / History / Servers / Commands navigation
+
+### Active Development
+
+Manual Windows acceptance on 2026-09-22 confirmed the application shell, repository context, commit diff surface and repository-aware terminal can render on a real Windows desktop. The following usability work is now part of the active workbench flow rather than deferred cosmetic polish:
+
+- Fix clipped/truncated navigation labels and establish a resizable minimum-width navigation rail
+- Improve visual hierarchy between repository header, navigation and active workspace
+- Use resizable split panes for master/detail views instead of large fixed empty regions
+- Add meaningful empty states for clean working trees, empty deployment queues and deployment history
+- Prevent stale deployment failure/dry-run messages from appearing as the primary empty state
+- Improve commit browser density and alignment using IDE-style metadata columns
+- Make long diffs/logs readable with appropriate scrolling and monospace presentation
+- Improve form density/alignment in Commands and Servers; avoid oversized unused list panes when empty
+- Add disabled/busy/loading/error states to actions whose prerequisites are missing
+- Preserve component-based views so these improvements do not turn the workspace into one monolithic XAML file
+- Track RTL/Persian support without allowing it to block the main workbench flow
 
 ### Extension Candidates
 
