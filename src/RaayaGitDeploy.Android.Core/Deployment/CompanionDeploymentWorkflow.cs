@@ -27,6 +27,8 @@ public sealed class CompanionDeploymentWorkflow
     public CompanionDeploymentRun? CurrentRun { get; private set; }
     public CompanionDeploymentRun? SelectedHistoryRun { get; private set; }
     public bool IsCurrentRunTerminal => CurrentRun is not null && TerminalStates.Contains(CurrentRun.State);
+    public CompanionDeploymentActivityState ActivityState { get; private set; } = CompanionDeploymentActivityState.Idle;
+    public string? ActivityMessage { get; private set; }
 
     public async Task LoadRepositoriesAsync(CancellationToken cancellationToken)
     {
@@ -38,6 +40,7 @@ public sealed class CompanionDeploymentWorkflow
         Preview = null;
         CurrentRun = null;
         SelectedHistoryRun = null;
+        SetActivity(CompanionDeploymentActivityState.Idle);
     }
 
     public async Task SelectRepositoryAsync(string repositoryId, CancellationToken cancellationToken)
@@ -50,6 +53,7 @@ public sealed class CompanionDeploymentWorkflow
         Preview = null;
         CurrentRun = null;
         SelectedHistoryRun = null;
+        SetActivity(CompanionDeploymentActivityState.Idle);
     }
 
     public void SelectProfile(string profileId)
@@ -58,6 +62,7 @@ public sealed class CompanionDeploymentWorkflow
             ?? throw new InvalidOperationException("Select an authorized deployment profile returned by the companion agent.");
         Preview = null;
         CurrentRun = null;
+        SetActivity(CompanionDeploymentActivityState.Idle);
     }
 
     public async Task<IReadOnlyList<CompanionDeploymentRun>> LoadHistoryAsync(CancellationToken cancellationToken)
@@ -97,10 +102,25 @@ public sealed class CompanionDeploymentWorkflow
 
         Preview = null;
         CurrentRun = null;
-        var preview = await _api.DryRunAsync(new CompanionDeploymentRequest(repository.Id, profile.Id, paths, DryRun: true), cancellationToken).ConfigureAwait(false);
-        EnsurePreviewScope(preview, repository.Id, profile.Id);
-        Preview = preview;
-        return preview;
+        SetActivity(CompanionDeploymentActivityState.Loading, "Preparing Dry Run...");
+        try
+        {
+            var preview = await _api.DryRunAsync(new CompanionDeploymentRequest(repository.Id, profile.Id, paths, DryRun: true), cancellationToken).ConfigureAwait(false);
+            EnsurePreviewScope(preview, repository.Id, profile.Id);
+            Preview = preview;
+            SetActivity(CompanionDeploymentActivityState.Ready, "Dry Run ready for review.");
+            return preview;
+        }
+        catch (OperationCanceledException)
+        {
+            SetActivity(CompanionDeploymentActivityState.Idle);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            SetActivity(CompanionDeploymentActivityState.RecoverableError, ex.Message);
+            throw;
+        }
     }
 
     public async Task<CompanionDeploymentRun> StartDeploymentAsync(bool confirmed, CancellationToken cancellationToken)
@@ -111,10 +131,25 @@ public sealed class CompanionDeploymentWorkflow
         if (profile.RequiresConfirmation && !confirmed)
             throw new InvalidOperationException("This deployment profile requires explicit confirmation.");
 
-        var run = await _api.StartDeploymentAsync(preview.Id, confirmed, cancellationToken).ConfigureAwait(false);
-        EnsureRunScope(run, repository.Id, profile.Id);
-        CurrentRun = run;
-        return run;
+        SetActivity(CompanionDeploymentActivityState.Loading, "Starting deployment...");
+        try
+        {
+            var run = await _api.StartDeploymentAsync(preview.Id, confirmed, cancellationToken).ConfigureAwait(false);
+            EnsureRunScope(run, repository.Id, profile.Id);
+            CurrentRun = run;
+            UpdateActivityFromRun(run);
+            return run;
+        }
+        catch (OperationCanceledException)
+        {
+            SetActivity(CompanionDeploymentActivityState.Ready, "Deployment start cancelled; Dry Run remains available.");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            SetActivity(CompanionDeploymentActivityState.RecoverableError, ex.Message);
+            throw;
+        }
     }
 
     public async Task<CompanionDeploymentRun> RefreshDeploymentAsync(CancellationToken cancellationToken)
@@ -123,12 +158,28 @@ public sealed class CompanionDeploymentWorkflow
         var repository = SelectedRepository ?? throw new InvalidOperationException("Select a repository before requesting progress.");
         var profile = SelectedProfile ?? throw new InvalidOperationException("Select a deployment profile before requesting progress.");
         if (IsCurrentRunTerminal)
+        {
+            UpdateActivityFromRun(run);
             return run;
+        }
 
-        var refreshed = await _api.GetDeploymentAsync(run.Id, cancellationToken).ConfigureAwait(false);
-        EnsureRunScope(refreshed, repository.Id, profile.Id);
-        CurrentRun = refreshed;
-        return refreshed;
+        try
+        {
+            var refreshed = await _api.GetDeploymentAsync(run.Id, cancellationToken).ConfigureAwait(false);
+            EnsureRunScope(refreshed, repository.Id, profile.Id);
+            CurrentRun = refreshed;
+            UpdateActivityFromRun(refreshed);
+            return refreshed;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            SetActivity(CompanionDeploymentActivityState.RecoverableError, ex.Message);
+            throw;
+        }
     }
 
     public async Task<CompanionDeploymentRun> PollUntilTerminalAsync(int maxAttempts, TimeSpan delay, CancellationToken cancellationToken)
@@ -151,6 +202,17 @@ public sealed class CompanionDeploymentWorkflow
         return CurrentRun!;
     }
 
+    private void UpdateActivityFromRun(CompanionDeploymentRun run)
+    {
+        SetActivity(TerminalStates.Contains(run.State) ? CompanionDeploymentActivityState.Terminal : CompanionDeploymentActivityState.Running, run.State);
+    }
+
+    private void SetActivity(CompanionDeploymentActivityState state, string? message = null)
+    {
+        ActivityState = state;
+        ActivityMessage = message;
+    }
+
     private static void EnsurePreviewScope(CompanionDeploymentPreview preview, string repositoryId, string profileId)
     {
         if (!string.Equals(preview.RepositoryId, repositoryId, StringComparison.Ordinal) ||
@@ -165,4 +227,14 @@ public sealed class CompanionDeploymentWorkflow
         if (expectedProfileId is not null && !string.Equals(run.ProfileId, expectedProfileId, StringComparison.Ordinal))
             throw new InvalidOperationException("The companion agent returned a deployment for another profile.");
     }
+}
+
+public enum CompanionDeploymentActivityState
+{
+    Idle,
+    Loading,
+    Ready,
+    Running,
+    RecoverableError,
+    Terminal
 }
