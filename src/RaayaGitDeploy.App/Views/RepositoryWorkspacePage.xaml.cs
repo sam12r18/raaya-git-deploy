@@ -110,15 +110,16 @@ public sealed partial class RepositoryWorkspacePage : Page
     private async void CommandDelete_Click(object sender,RoutedEventArgs e){try{await _commands.DeleteSelectedAsync(CancellationToken.None);CommandNew_Click(sender,e);RefreshCommandsSurface();}catch(Exception ex){ShowError(ex.Message);}}
     private async void CommandRun_Click(object sender,RoutedEventArgs e){try{await _commands.RunSelectedAsync(CancellationToken.None);}catch(Exception ex){ShowError(ex.Message);}}
 
-    private async void TerminalStart_Click(object sender,RoutedEventArgs e){try{if(string.IsNullOrWhiteSpace(ViewModel.RepositoryPath))throw new InvalidOperationException("Open a repository before starting the terminal.");if(!string.Equals(_terminalRepository,ViewModel.RepositoryPath,StringComparison.OrdinalIgnoreCase)){await _terminal.SwitchRepositoryAsync(ViewModel.RepositoryPath,CancellationToken.None);_terminalRepository=ViewModel.RepositoryPath;}await _terminal.StartAsync(CancellationToken.None);RefreshTerminalSurface();}catch(Exception ex){ShowError(ex.Message);}}
+    private async void TerminalStart_Click(object sender,RoutedEventArgs e){try{if(string.IsNullOrWhiteSpace(ViewModel.RepositoryPath))throw new InvalidOperationException("Open a repository before starting the terminal.");if(!string.Equals(_terminalRepository,ViewModel.RepositoryPath,StringComparison.OrdinalIgnoreCase)){await _terminal.SwitchRepositoryAsync(ViewModel.RepositoryPath,CancellationToken.None);_terminalRepository=ViewModel.RepositoryPath;TerminalOutput.Text=string.Empty;}await _terminal.StartAsync(CancellationToken.None);RefreshTerminalSurface();}catch(Exception ex){ShowError(ex.Message);}}
     private async void TerminalSend_Click(object sender,RoutedEventArgs e){try{if(string.IsNullOrWhiteSpace(TerminalInput.Text))return;var command=TerminalInput.Text;TerminalInput.Text=string.Empty;await _terminal.SendAsync(command,CancellationToken.None);}catch(Exception ex){ShowError(ex.Message);}}
     private async void TerminalStop_Click(object sender,RoutedEventArgs e){try{await _terminal.StopAsync(CancellationToken.None);RefreshTerminalSurface();}catch(Exception ex){ShowError(ex.Message);}}
     private void RefreshTerminalSurface()
     {
         if (TerminalOutput is null) return;
-        if (TerminalOutput.Text != _terminal.Output)
+        var pendingOutput = _terminal.DrainPendingOutput();
+        if (!string.IsNullOrEmpty(pendingOutput))
         {
-            TerminalOutput.Text = _terminal.Output;
+            TerminalOutput.Text += pendingOutput;
             TerminalScrollViewer.ChangeView(null, TerminalScrollViewer.ScrollableHeight, null, disableAnimation: true);
         }
         TerminalState.Text = _terminal.IsRunning ? "Running" : _terminal.ExitCode is int code ? $"Exited ({code})" : "Stopped";
