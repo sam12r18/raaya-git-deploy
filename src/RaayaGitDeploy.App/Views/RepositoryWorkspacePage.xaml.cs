@@ -96,9 +96,37 @@ public sealed partial class RepositoryWorkspacePage : Page
     }
     private async void HistoryRefresh_Click(object sender, RoutedEventArgs e) => await LoadHistoryAsync();
     private void HistoryList_SelectionChanged(object sender, SelectionChangedEventArgs e) { HistoryDetailsList.ItemsSource = (HistoryList.SelectedItem as DeploymentHistoryEntry)?.Items; }
-    private void ServersList_SelectionChanged(object sender, SelectionChangedEventArgs e) { _deployment.Servers.SelectedProfile = ServersList.SelectedItem as ServerProfile; ServerConnectionStatus.Text = string.Empty; if (_deployment.Servers.SelectedProfile is { } p) { ServerName.Text=p.DisplayName; ServerHost.Text=p.Host; ServerPort.Text=p.Port.ToString(); ServerUsername.Text=p.Username; ServerRemoteRoot.Text=p.RemoteRoot; ServerKeyReference.Text=p.KeyReference; } }
-    private void ServerNew_Click(object sender, RoutedEventArgs e) { _deployment.Servers.SelectedProfile=null; ServersList.SelectedItem=null; ServerName.Text=ServerHost.Text=ServerUsername.Text=ServerRemoteRoot.Text=ServerKeyReference.Text=string.Empty; ServerPort.Text="22"; ServerConnectionStatus.Text=string.Empty; }
-    private async void ServerSave_Click(object sender, RoutedEventArgs e) { try { if (!int.TryParse(ServerPort.Text, out var port)) throw new InvalidOperationException("Port must be a number."); var profile=new ServerProfile(_deployment.Servers.SelectedProfile?.Id ?? Guid.NewGuid().ToString("N"), ServerName.Text.Trim(), ServerHost.Text.Trim(), port, ServerUsername.Text.Trim(), ServerRemoteRoot.Text.Trim(), ServerAuthenticationMode.SshKey, ServerKeyReference.Text.Trim()); await _deployment.Servers.SaveAsync(profile, CancellationToken.None); ServerConnectionStatus.Text="Profile saved. Test the connection before deployment."; RefreshDeploymentSurface(); } catch(Exception ex){ ServerConnectionStatus.Text="Profile was not saved."; ShowError(ex.Message); } }
+    private void ServersList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _deployment.Servers.SelectedProfile = ServersList.SelectedItem as ServerProfile;
+        ServerConnectionStatus.Text = string.Empty;
+        if (_deployment.Servers.SelectedProfile is not { } p) return;
+        ServerName.Text = p.DisplayName;
+        ServerHost.Text = p.Host;
+        ServerPort.Text = p.Port.ToString();
+        ServerUsername.Text = p.Username;
+        ServerRemoteRoot.Text = p.RemoteRoot;
+        ServerKeyReference.Text = p.KeyReference;
+        ServerTransport.SelectedIndex = p.Transport switch { ServerTransportKind.Sftp => 0, ServerTransportKind.Ftp => 1, ServerTransportKind.Ftps => 2, _ => 0 };
+    }
+    private void ServerNew_Click(object sender, RoutedEventArgs e) { _deployment.Servers.SelectedProfile=null; ServersList.SelectedItem=null; ServerName.Text=ServerHost.Text=ServerUsername.Text=ServerRemoteRoot.Text=ServerKeyReference.Text=string.Empty; ServerTransport.SelectedIndex=0; ServerPort.Text="22"; ServerConnectionStatus.Text=string.Empty; }
+    private async void ServerSave_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            int? port = null;
+            if (!string.IsNullOrWhiteSpace(ServerPort.Text))
+            {
+                if (!int.TryParse(ServerPort.Text, out var parsedPort)) throw new InvalidOperationException("Port must be a number.");
+                port = parsedPort;
+            }
+            var transport = ServerTransport.SelectedIndex switch { 1 => ServerTransportKind.Ftp, 2 => ServerTransportKind.Ftps, _ => ServerTransportKind.Sftp };
+            await _deployment.Servers.SaveDraftAsync(_deployment.Servers.SelectedProfile?.Id, ServerName.Text.Trim(), ServerHost.Text.Trim(), port, ServerUsername.Text.Trim(), ServerRemoteRoot.Text.Trim(), ServerKeyReference.Text.Trim(), transport, CancellationToken.None);
+            ServerConnectionStatus.Text = _deployment.Servers.StatusMessage ?? "Profile saved. Test the connection before deployment.";
+            RefreshDeploymentSurface();
+        }
+        catch(Exception ex){ ServerConnectionStatus.Text="Profile was not saved."; ShowError(ex.Message); }
+    }
     private async void ServerDelete_Click(object sender, RoutedEventArgs e) { try { await _deployment.Servers.DeleteSelectedAsync(CancellationToken.None); ServerNew_Click(sender,e); RefreshDeploymentSurface(); } catch(Exception ex){ ShowError(ex.Message); } }
     private async void ServerTest_Click(object sender, RoutedEventArgs e) { try { var profile=_deployment.Servers.SelectedProfile ?? throw new InvalidOperationException("Select a server profile before testing the connection."); ServerConnectionStatus.Text=$"Testing connection to {profile.DisplayName}..."; await _deployment.Servers.TestSelectedConnectionAsync(CancellationToken.None); ServerConnectionStatus.Text=$"Connection to {profile.DisplayName} succeeded."; } catch(Exception ex){ ServerConnectionStatus.Text="Connection test failed. Review the profile and credential reference."; ShowError(ex.Message); } }
 
