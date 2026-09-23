@@ -14,27 +14,27 @@ public sealed class ProtectedAccessTokenStoreTests
         await store.SaveAccessTokenAsync("session-token", CancellationToken.None);
 
         Assert.Equal("session-token", protector.LastPlaintext);
-        Assert.Equal([1, 2, 3], persistence.Stored);
+        Assert.Equal(new byte[] { 1, 2, 3 }, persistence.Stored);
     }
 
     [Fact]
     public async Task Read_unprotects_persisted_payload()
     {
         var protector = new FakeProtector { PlaintextToReturn = "session-token" };
-        var persistence = new FakePersistence { Stored = [4, 5, 6] };
+        var persistence = new FakePersistence { Stored = new byte[] { 4, 5, 6 } };
         var store = new ProtectedAccessTokenStore(protector, persistence);
 
         var token = await store.GetAccessTokenAsync(CancellationToken.None);
 
         Assert.Equal("session-token", token);
-        Assert.Equal([4, 5, 6], protector.LastProtectedPayload);
+        Assert.Equal(new byte[] { 4, 5, 6 }, protector.LastProtectedPayload);
     }
 
     [Fact]
     public async Task Corrupt_payload_is_cleared_and_requires_reauthentication()
     {
         var protector = new FakeProtector { ThrowOnUnprotect = true };
-        var persistence = new FakePersistence { Stored = [9] };
+        var persistence = new FakePersistence { Stored = new byte[] { 9 } };
         var store = new ProtectedAccessTokenStore(protector, persistence);
 
         var token = await store.GetAccessTokenAsync(CancellationToken.None);
@@ -54,14 +54,14 @@ public sealed class ProtectedAccessTokenStoreTests
         public Task<byte[]> ProtectAsync(string accessToken, CancellationToken cancellationToken)
         {
             LastPlaintext = accessToken;
-            return Task.FromResult<byte[]>([1, 2, 3]);
+            return Task.FromResult(new byte[] { 1, 2, 3 });
         }
 
-        public Task<string> UnprotectAsync(byte[] protectedToken, CancellationToken cancellationToken)
+        public Task<string?> UnprotectAsync(byte[] protectedToken, CancellationToken cancellationToken)
         {
             LastProtectedPayload = protectedToken;
             if (ThrowOnUnprotect) throw new InvalidOperationException("corrupt ciphertext");
-            return Task.FromResult(PlaintextToReturn);
+            return Task.FromResult<string?>(PlaintextToReturn);
         }
     }
 
