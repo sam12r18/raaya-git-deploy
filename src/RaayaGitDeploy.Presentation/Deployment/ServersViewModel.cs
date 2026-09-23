@@ -30,6 +30,34 @@ public sealed class ServersViewModel
                 : $"Loaded {Profiles.Count} server profile(s).";
         });
 
+    /// <summary>
+    /// Creates and persists a profile through the transport-aware profile policy. UI surfaces
+    /// should use this entry point rather than constructing SFTP-shaped profiles directly.
+    /// </summary>
+    public Task SaveDraftAsync(
+        string? id,
+        string displayName,
+        string host,
+        int? port,
+        string username,
+        string remoteRoot,
+        string credentialReference,
+        ServerTransportKind transport,
+        CancellationToken cancellationToken)
+    {
+        var profile = ServerProfilePolicy.Create(
+            string.IsNullOrWhiteSpace(id) ? Guid.NewGuid().ToString("N") : id,
+            displayName,
+            host,
+            port,
+            username,
+            remoteRoot,
+            credentialReference,
+            transport);
+
+        return SaveAsync(profile, cancellationToken);
+    }
+
     public Task SaveAsync(ServerProfile profile, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
