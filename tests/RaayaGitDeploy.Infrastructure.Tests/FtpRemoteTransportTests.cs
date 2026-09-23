@@ -48,7 +48,9 @@ public sealed class FtpRemoteTransportTests
             "/public_html/app.zip",
             CancellationToken.None);
 
-        Assert.Equal(("local.zip", "/public_html/app.zip"), adapter.Upload);
+        Assert.NotNull(adapter.Upload);
+        Assert.Equal("local.zip", adapter.Upload.Value.Local);
+        Assert.Equal("/public_html/app.zip", adapter.Upload.Value.Remote);
         Assert.True(adapter.Disposed);
     }
 
@@ -131,7 +133,7 @@ public sealed class FtpRemoteTransportTests
         }
 
         public Task<IReadOnlyList<string>> ListAsync(string remotePath, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<string>>([]);
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
 
         public Task UploadAsync(string localPath, string remotePath, CancellationToken cancellationToken)
         {
