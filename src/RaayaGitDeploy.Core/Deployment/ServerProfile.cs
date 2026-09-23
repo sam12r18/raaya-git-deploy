@@ -1,5 +1,15 @@
 namespace RaayaGitDeploy.Core.Deployment;
 
+/// <summary>
+/// Selects the remote transport without exposing transport-specific connection details to deployment planning/history.
+/// </summary>
+public enum ServerTransportKind
+{
+    Sftp,
+    Ftp,
+    Ftps
+}
+
 public enum ServerAuthenticationMode
 {
     SshKey
@@ -13,4 +23,5 @@ public sealed record ServerProfile(
     string Username,
     string RemoteRoot,
     ServerAuthenticationMode AuthenticationMode,
-    string KeyReference);
+    string KeyReference,
+    ServerTransportKind Transport = ServerTransportKind.Sftp);
