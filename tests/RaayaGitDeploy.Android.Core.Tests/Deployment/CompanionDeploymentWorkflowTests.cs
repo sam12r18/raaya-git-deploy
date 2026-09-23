@@ -20,6 +20,27 @@ public sealed class CompanionDeploymentWorkflowTests
     }
 
     [Fact]
+    public async Task ActivityState_FollowsDryRunDeploymentAndTerminalProgress()
+    {
+        var api = new FakeApi();
+        var workflow = new CompanionDeploymentWorkflow(api);
+        await PrepareAsync(workflow);
+        Assert.Equal(CompanionDeploymentActivityState.Idle, workflow.ActivityState);
+
+        await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
+        Assert.Equal(CompanionDeploymentActivityState.Ready, workflow.ActivityState);
+        Assert.Equal("Dry Run ready for review.", workflow.ActivityMessage);
+
+        await workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken);
+        Assert.Equal(CompanionDeploymentActivityState.Running, workflow.ActivityState);
+        Assert.Equal("queued", workflow.ActivityMessage);
+
+        await workflow.RefreshDeploymentAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(CompanionDeploymentActivityState.Terminal, workflow.ActivityState);
+        Assert.Equal("succeeded", workflow.ActivityMessage);
+    }
+
+    [Fact]
     public async Task DryRun_RejectsPreviewFromAnotherRepository_AndClearsPreviewState()
     {
         var api = new FakeApi { ReturnForeignPreviewRepository = true };
@@ -28,6 +49,7 @@ public sealed class CompanionDeploymentWorkflowTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken));
         Assert.Null(workflow.Preview);
         Assert.Null(workflow.CurrentRun);
+        Assert.Equal(CompanionDeploymentActivityState.RecoverableError, workflow.ActivityState);
     }
 
     [Fact]
@@ -39,6 +61,7 @@ public sealed class CompanionDeploymentWorkflowTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken));
         Assert.Null(workflow.Preview);
         Assert.Null(workflow.CurrentRun);
+        Assert.Equal(CompanionDeploymentActivityState.RecoverableError, workflow.ActivityState);
     }
 
     [Fact]
@@ -84,6 +107,7 @@ public sealed class CompanionDeploymentWorkflowTests
         await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
         await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken));
         Assert.Null(workflow.CurrentRun);
+        Assert.Equal(CompanionDeploymentActivityState.RecoverableError, workflow.ActivityState);
     }
 
     [Fact]
@@ -95,6 +119,7 @@ public sealed class CompanionDeploymentWorkflowTests
         await workflow.DryRunAsync(["src/app.cs"], TestContext.Current.CancellationToken);
         await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken));
         Assert.Null(workflow.CurrentRun);
+        Assert.Equal(CompanionDeploymentActivityState.RecoverableError, workflow.ActivityState);
     }
 
     [Fact]
@@ -125,6 +150,7 @@ public sealed class CompanionDeploymentWorkflowTests
         var started = await workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken);
         await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.RefreshDeploymentAsync(TestContext.Current.CancellationToken));
         Assert.Same(started, workflow.CurrentRun);
+        Assert.Equal(CompanionDeploymentActivityState.RecoverableError, workflow.ActivityState);
     }
 
     [Fact]
@@ -137,6 +163,7 @@ public sealed class CompanionDeploymentWorkflowTests
         var started = await workflow.StartDeploymentAsync(true, TestContext.Current.CancellationToken);
         await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.RefreshDeploymentAsync(TestContext.Current.CancellationToken));
         Assert.Same(started, workflow.CurrentRun);
+        Assert.Equal(CompanionDeploymentActivityState.RecoverableError, workflow.ActivityState);
     }
 
     [Fact]
@@ -151,6 +178,7 @@ public sealed class CompanionDeploymentWorkflowTests
         Assert.Equal("running", run.State);
         Assert.False(workflow.IsCurrentRunTerminal);
         Assert.Equal(3, api.GetDeploymentCalls);
+        Assert.Equal(CompanionDeploymentActivityState.Running, workflow.ActivityState);
     }
 
     private static async Task PrepareAsync(CompanionDeploymentWorkflow workflow)
