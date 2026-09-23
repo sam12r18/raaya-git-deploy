@@ -56,7 +56,9 @@ public sealed class JsonServerProfileStore : IServerProfileStore
         if (!File.Exists(StoragePath)) return Array.Empty<ServerProfile>();
         await using var stream = File.OpenRead(StoragePath);
         var profiles = await JsonSerializer.DeserializeAsync<List<ServerProfile>>(stream, SerializerOptions, cancellationToken).ConfigureAwait(false);
-        return profiles is null ? Array.Empty<ServerProfile>() : profiles;
+        if (profiles is null) return Array.Empty<ServerProfile>();
+        foreach (var profile in profiles) Validate(profile);
+        return profiles;
     }
 
     private async Task SaveCoreAsync(IReadOnlyCollection<ServerProfile> profiles, CancellationToken cancellationToken)
@@ -78,5 +80,13 @@ public sealed class JsonServerProfileStore : IServerProfileStore
         ArgumentException.ThrowIfNullOrWhiteSpace(profile.RemoteRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(profile.KeyReference);
         if (profile.Port is < 1 or > 65535) throw new ArgumentOutOfRangeException(nameof(profile), "Server port must be between 1 and 65535.");
+
+        var expectedAuthentication = profile.Transport == ServerTransportKind.Sftp
+            ? ServerAuthenticationMode.SshKey
+            : ServerAuthenticationMode.ExternalCredentialReference;
+        if (profile.AuthenticationMode != expectedAuthentication)
+        {
+            throw new InvalidDataException($"{profile.Transport} profiles require {expectedAuthentication} authentication metadata.");
+        }
     }
 }
