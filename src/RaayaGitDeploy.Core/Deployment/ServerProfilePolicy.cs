@@ -34,6 +34,10 @@ public static class ServerProfilePolicy
         var resolvedPort = port ?? DefaultPort(transport);
         if (resolvedPort is < 1 or > 65535) throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 1 and 65535.");
 
+        var authenticationMode = transport == ServerTransportKind.Sftp
+            ? ServerAuthenticationMode.SshKey
+            : ServerAuthenticationMode.ExternalCredentialReference;
+
         return new ServerProfile(
             id.Trim(),
             displayName.Trim(),
@@ -41,7 +45,7 @@ public static class ServerProfilePolicy
             resolvedPort,
             username.Trim(),
             remoteRoot.Trim(),
-            ServerAuthenticationMode.SshKey,
+            authenticationMode,
             credentialReference.Trim(),
             transport);
     }
