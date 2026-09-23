@@ -1,3 +1,5 @@
+using System.Net.Http;
+using RaayaGitDeploy.Android.Core.Api;
 using RaayaGitDeploy.Core.Companion;
 
 namespace RaayaGitDeploy.Android.Core.Deployment;
@@ -118,7 +120,7 @@ public sealed class CompanionDeploymentWorkflow
         }
         catch (Exception ex)
         {
-            SetActivity(CompanionDeploymentActivityState.RecoverableError, ex.Message);
+            SetFailureActivity(ex);
             throw;
         }
     }
@@ -147,7 +149,7 @@ public sealed class CompanionDeploymentWorkflow
         }
         catch (Exception ex)
         {
-            SetActivity(CompanionDeploymentActivityState.RecoverableError, ex.Message);
+            SetFailureActivity(ex);
             throw;
         }
     }
@@ -177,7 +179,7 @@ public sealed class CompanionDeploymentWorkflow
         }
         catch (Exception ex)
         {
-            SetActivity(CompanionDeploymentActivityState.RecoverableError, ex.Message);
+            SetFailureActivity(ex);
             throw;
         }
     }
@@ -205,6 +207,25 @@ public sealed class CompanionDeploymentWorkflow
     private void UpdateActivityFromRun(CompanionDeploymentRun run)
     {
         SetActivity(TerminalStates.Contains(run.State) ? CompanionDeploymentActivityState.Terminal : CompanionDeploymentActivityState.Running, run.State);
+    }
+
+    private void SetFailureActivity(Exception exception)
+    {
+        switch (exception)
+        {
+            case CompanionRateLimitedException rateLimited:
+                var retryMessage = rateLimited.RetryAfter is { } retryAfter
+                    ? $"Companion agent is rate limited. Retry in {Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds))} seconds."
+                    : "Companion agent is rate limited. Retry shortly.";
+                SetActivity(CompanionDeploymentActivityState.RateLimited, retryMessage);
+                break;
+            case HttpRequestException:
+                SetActivity(CompanionDeploymentActivityState.Offline, "Companion agent is unreachable. Check the network and agent availability.");
+                break;
+            default:
+                SetActivity(CompanionDeploymentActivityState.RecoverableError, exception.Message);
+                break;
+        }
     }
 
     private void SetActivity(CompanionDeploymentActivityState state, string? message = null)
@@ -236,5 +257,7 @@ public enum CompanionDeploymentActivityState
     Ready,
     Running,
     RecoverableError,
+    Offline,
+    RateLimited,
     Terminal
 }
