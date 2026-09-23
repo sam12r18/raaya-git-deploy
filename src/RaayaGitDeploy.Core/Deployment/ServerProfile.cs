@@ -12,7 +12,8 @@ public enum ServerTransportKind
 
 public enum ServerAuthenticationMode
 {
-    SshKey
+    SshKey,
+    ExternalCredentialReference
 }
 
 public sealed record ServerProfile(
