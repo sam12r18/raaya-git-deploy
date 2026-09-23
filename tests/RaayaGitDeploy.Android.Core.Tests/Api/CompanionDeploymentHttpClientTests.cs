@@ -75,7 +75,7 @@ public sealed class CompanionDeploymentHttpClientTests
     {
         var handler = new RecordingHandler(HttpStatusCode.OK, "[]");
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://agent.example/") };
-        var client = new CompanionDeploymentHttpClient(http, new FakeAccessTokenStore(new string('a', 8192)));
+        var client = new CompanionDeploymentHttpClient(http, new FakeAccessTokenStore(new string('a', 8193)));
         await Assert.ThrowsAsync<CompanionAuthenticationRequiredException>(() => client.GetRepositoriesAsync(CancellationToken.None));
         Assert.Equal(0, handler.CallCount);
         Assert.Null(handler.AuthorizationParameter);
