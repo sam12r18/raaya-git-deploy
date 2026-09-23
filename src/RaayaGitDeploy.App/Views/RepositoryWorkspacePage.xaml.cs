@@ -108,8 +108,21 @@ public sealed partial class RepositoryWorkspacePage : Page
         ServerRemoteRoot.Text = p.RemoteRoot;
         ServerKeyReference.Text = p.KeyReference;
         ServerTransport.SelectedIndex = p.Transport switch { ServerTransportKind.Sftp => 0, ServerTransportKind.Ftp => 1, ServerTransportKind.Ftps => 2, _ => 0 };
+        UpdateServerTransportFields(p.Transport, resetDefaultPort: false);
     }
-    private void ServerNew_Click(object sender, RoutedEventArgs e) { _deployment.Servers.SelectedProfile=null; ServersList.SelectedItem=null; ServerName.Text=ServerHost.Text=ServerUsername.Text=ServerRemoteRoot.Text=ServerKeyReference.Text=string.Empty; ServerTransport.SelectedIndex=0; ServerPort.Text="22"; ServerConnectionStatus.Text=string.Empty; }
+    private void ServerTransport_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var transport = ServerTransport.SelectedIndex switch { 1 => ServerTransportKind.Ftp, 2 => ServerTransportKind.Ftps, _ => ServerTransportKind.Sftp };
+        UpdateServerTransportFields(transport, resetDefaultPort: _deployment.Servers.SelectedProfile is null);
+    }
+    private void UpdateServerTransportFields(ServerTransportKind transport, bool resetDefaultPort)
+    {
+        if (ServerKeyReference is null || ServerPort is null) return;
+        ServerKeyReference.Header = transport == ServerTransportKind.Sftp ? "SSH key reference/path" : "Credential reference";
+        ServerKeyReference.PlaceholderText = transport == ServerTransportKind.Sftp ? "Key path or credential reference" : "Desktop/agent credential reference (no raw password)";
+        if (resetDefaultPort) ServerPort.Text = transport == ServerTransportKind.Sftp ? "22" : "21";
+    }
+    private void ServerNew_Click(object sender, RoutedEventArgs e) { _deployment.Servers.SelectedProfile=null; ServersList.SelectedItem=null; ServerName.Text=ServerHost.Text=ServerUsername.Text=ServerRemoteRoot.Text=ServerKeyReference.Text=string.Empty; ServerTransport.SelectedIndex=0; ServerPort.Text="22"; ServerConnectionStatus.Text=string.Empty; UpdateServerTransportFields(ServerTransportKind.Sftp, resetDefaultPort:false); }
     private async void ServerSave_Click(object sender, RoutedEventArgs e)
     {
         try
