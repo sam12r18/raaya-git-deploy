@@ -60,8 +60,15 @@ public sealed class FtpRemoteTransportTests
         var resolver = new RecordingCredentialResolver();
         var transport = new FtpRemoteTransport(_ => new RecordingFtpClientAdapter(), resolver);
         var profile = new ServerProfile(
-            "server-1", "SFTP", "example.test", 22, "/", "key-ref",
-            ServerTransportKind.Sftp, ServerAuthenticationMode.SshKey);
+            "server-1",
+            "SFTP",
+            "example.test",
+            22,
+            "deploy-user",
+            "/",
+            ServerAuthenticationMode.SshKey,
+            "key-ref",
+            ServerTransportKind.Sftp);
 
         await Assert.ThrowsAsync<ArgumentException>(
             () => transport.TestConnectionAsync(profile, CancellationToken.None));
@@ -90,10 +97,11 @@ public sealed class FtpRemoteTransportTests
             transport == ServerTransportKind.Ftps ? "cPanel FTPS" : "cPanel FTP",
             "example.test",
             21,
+            "deploy-user",
             "/public_html",
+            ServerAuthenticationMode.ExternalCredentialReference,
             "credential-ref",
-            transport,
-            ServerAuthenticationMode.ExternalCredentialReference);
+            transport);
 
     private sealed class RecordingCredentialResolver : IFtpCredentialResolver
     {
