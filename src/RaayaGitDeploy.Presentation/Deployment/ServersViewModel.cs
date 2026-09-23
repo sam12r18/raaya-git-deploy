@@ -91,14 +91,42 @@ public sealed class ServersViewModel
         var selected = SelectedProfile
             ?? throw new InvalidOperationException("Select a server profile before testing the connection.");
 
-        return RunAsync($"Testing connection to {selected.DisplayName}...", async () =>
+        var protocol = selected.Transport switch
         {
-            await _transport.TestConnectionAsync(selected, cancellationToken);
-            StatusMessage = $"Connection to '{selected.DisplayName}' succeeded.";
-        });
+            ServerTransportKind.Sftp => "SFTP/SSH",
+            ServerTransportKind.Ftp => "FTP",
+            ServerTransportKind.Ftps => "FTPS",
+            _ => selected.Transport.ToString()
+        };
+
+        return RunAsync(
+            $"Testing {protocol} connection to {selected.DisplayName}...",
+            async () =>
+            {
+                await _transport.TestConnectionAsync(selected, cancellationToken);
+                StatusMessage = $"{protocol} connection to '{selected.DisplayName}' succeeded.";
+            },
+            ex => BuildConnectionError(selected, protocol, ex));
     }
 
-    private async Task RunAsync(string pendingMessage, Func<Task> operation)
+    private static string BuildConnectionError(ServerProfile profile, string protocol, Exception exception)
+    {
+        var endpoint = $"{profile.Host}:{profile.Port}";
+        var guidance = profile.Transport switch
+        {
+            ServerTransportKind.Sftp => "Check the SSH host, port, username, key/credential reference, and host-key trust configuration.",
+            ServerTransportKind.Ftp => "Check the cPanel FTP host, port, username, credential reference, and whether plain FTP is enabled by the hosting provider.",
+            ServerTransportKind.Ftps => "Check the cPanel FTPS host, port, credential reference, TLS mode, and server certificate validity.",
+            _ => "Check the server profile and transport configuration."
+        };
+
+        return $"{protocol} connection to {endpoint} failed: {exception.Message} {guidance}";
+    }
+
+    private async Task RunAsync(
+        string pendingMessage,
+        Func<Task> operation,
+        Func<Exception, string>? errorMessageFactory = null)
     {
         if (IsBusy)
             throw new InvalidOperationException("Wait for the current server operation to finish.");
@@ -118,7 +146,7 @@ public sealed class ServersViewModel
         catch (Exception ex)
         {
             HasError = true;
-            StatusMessage = ex.Message;
+            StatusMessage = errorMessageFactory?.Invoke(ex) ?? ex.Message;
             throw;
         }
         finally
