@@ -13,6 +13,7 @@ namespace RaayaGitDeploy.Android.Core.Api;
 public sealed class CompanionDeploymentHttpClient : ICompanionDeploymentApi
 {
     private const string ApiRoot = "api/companion/v1/";
+    private const int MaxAccessTokenLength = 8192;
     private readonly HttpClient _httpClient;
     private readonly IAccessTokenStore _tokenStore;
 
@@ -44,9 +45,7 @@ public sealed class CompanionDeploymentHttpClient : ICompanionDeploymentApi
 
     private async Task<T> SendAsync<T>(HttpMethod method, string relativeUri, object? body, CancellationToken cancellationToken)
     {
-        var token = await _tokenStore.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(token))
-            throw new CompanionAuthenticationRequiredException();
+        var token = ValidateAccessToken(await _tokenStore.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false));
 
         using var request = new HttpRequestMessage(method, relativeUri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -70,6 +69,17 @@ public sealed class CompanionDeploymentHttpClient : ICompanionDeploymentApi
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Companion API returned an empty response.");
+    }
+
+    private static string ValidateAccessToken(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            throw new CompanionAuthenticationRequiredException();
+
+        if (token.Length > MaxAccessTokenLength || token.Any(char.IsControl) || token.Any(char.IsWhiteSpace))
+            throw new CompanionAuthenticationRequiredException();
+
+        return token;
     }
 
     private static string Escape(string value)
