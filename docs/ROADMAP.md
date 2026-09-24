@@ -8,6 +8,44 @@ Release numbers describe software builds. They do not permanently reserve capabi
 
 ---
 
+## Product North Star — Git → Host without FileZilla work
+
+### Active Development — Highest Priority
+
+The primary product job is to eliminate the manual workflow of pulling Git changes, finding every changed file by hand, and uploading those files one-by-one to hosting.
+
+The normal Desktop path should become:
+
+**Open Repository → Pull/Update → Detect deployment delta → Review commits/files → Build Deploy Queue automatically → Dry Run → Deploy → Record deployed HEAD → History**
+
+Required behavior:
+
+- Capture `OLD_HEAD` before Pull/Update and `NEW_HEAD` after it, then derive Added / Modified / Deleted / Renamed paths automatically.
+- Track **Last Successfully Deployed Commit per repository + server profile**, so pending deployment is based on `last_deployed_head..local_head`, not merely the most recent Pull. Multiple pulls before deployment must not lose earlier pending changes.
+- Show commits included in the pending range with subject, author, date/time, SHA and changed paths.
+- Convert detected Git changes into Deployment Queue operations automatically; Added/Modified become uploads and Deleted/Renamed become explicit destructive operations requiring appropriate confirmation.
+- Combine three queue sources without conflating them: **Git-detected changes + generated/deployment-rule outputs + explicit manual files/folders**.
+- Support project deployment rules/presets for generated outputs such as `public/build/**` so build artifacts can accompany source changes even when they are not represented directly by the pulled Git delta.
+- Dry Run must show the exact target profile, remote root, upload/create/delete/rename plan and warnings before execution.
+- Successful deployment records repository, branch, from/to SHA, target server profile, item results and timestamp. Failed or partial deployment must never advance the successful deployed HEAD incorrectly.
+- Desktop may execute Git and FTP/FTPS/SFTP locally; secrets stay in the Desktop/agent credential boundary and never enter shared deployment/history models.
+
+### Mobile Companion
+
+Mobile follows the same deployment intent and history contracts but is **not a mobile FileZilla or SSH client**. Its preferred flow is:
+
+**Repository → Pending deployment range → Review summary/files → Dry Run → Confirm Deploy → Progress/Result → History**
+
+- Pending ranges and queue plans come from a controlled agent/API.
+- Mobile never receives raw SSH/SFTP/FTP/FTPS/Git credentials.
+- HTTPS authorization, least privilege, audit logging and explicit confirmation are mandatory for deploy execution.
+- Android Keystore (or platform equivalent) protects session/API credentials once the Android platform host exists.
+- Destructive operations remain constrained by server-side authorization and deployment policy rather than being exposed merely for Desktop parity.
+
+This north-star workflow takes precedence over isolated visual polish and secondary tooling unless a usability defect blocks the flow.
+
+---
+
 ## Status Labels
 
 ### Core Baseline
@@ -43,6 +81,8 @@ Requires validation before becoming part of the stable product contract.
 
 ### Active Development
 
+- Pull/Update orchestration with before/after HEAD capture and machine-readable delta detection
+- Pending deployment range from the last successful deployed HEAD to current local HEAD
 - IDE-style commit browser: repository/branch hierarchy, commit subject, author, author date/time, changed paths and commit diff in a dense master/detail workspace
 - Commit metadata columns and filtering comparable to modern IDE Git-log workflows
 
@@ -118,12 +158,17 @@ Requires validation before becoming part of the stable product contract.
 - Multiple server profiles
 - Dry Run
 
+### Active Development
+
+- Auto-populate Deployment Queue from pending Git delta
+- Persist last successfully deployed HEAD per repository/server profile
+- Merge Git-detected, generated/rule-based and manual queue sources with clear provenance
+- Per-project deployment rules and generated build-output presets
+
 ### Extension Candidates
 
 - Include/exclude patterns
 - Mapping templates
-- Per-project deployment rules
-- Generated build-output presets
 - Remote existence comparison
 - Content hash comparison
 
@@ -166,6 +211,11 @@ New transports should implement the transport contract without leaking transport
 - Structured logs
 - Cancellation
 
+### Active Development
+
+- Never advance Last Successfully Deployed Commit on failed or incomplete deployment
+- Make destructive operations generated from Git delete/rename explicit in Dry Run and confirmation
+
 ### Extension Candidates
 
 - Remote backup before overwrite
@@ -185,9 +235,14 @@ New transports should implement the transport contract without leaking transport
 - Repository / branch / HEAD context
 - Per-item result
 
-### Extension Candidates
+### Active Development
 
 - Changes Since Last Deploy
+- Server-profile-specific last successful deployed HEAD
+- Record from/to SHA with deployment result and item outcomes
+
+### Extension Candidates
+
 - Compare deployments
 - Restore previous deployment selection
 - Server-specific deployment timelines
@@ -209,6 +264,7 @@ New transports should implement the transport contract without leaking transport
 
 Manual Windows acceptance on 2026-09-22 confirmed the application shell, repository context, commit diff surface and repository-aware terminal can render on a real Windows desktop. The following usability work is now part of the active workbench flow rather than deferred cosmetic polish:
 
+- Make Pull/Update → pending deployment → Review → Dry Run → Deploy the dominant workbench path instead of making the user behave like a manual FTP client
 - Fix clipped/truncated navigation labels and establish a resizable minimum-width navigation rail
 - Improve visual hierarchy between repository header, navigation and active workspace
 - Use resizable split panes for master/detail views instead of large fixed empty regions
