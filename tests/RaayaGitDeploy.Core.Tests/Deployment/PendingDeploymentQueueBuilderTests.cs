@@ -54,9 +54,9 @@ public sealed class PendingDeploymentQueueBuilderTests : IDisposable
         Assert.Equal(2, result.Items.Count);
         AssertQueueItem(result.Items, "public/build/app.js", DeploymentQueueAction.Upload, DeploymentQueueSource.GeneratedRule);
         AssertQueueItem(result.Items, "public/build/app.css", DeploymentQueueAction.Upload, DeploymentQueueSource.GeneratedRule);
-        Assert.Single(result.Items.Where(item =>
+        Assert.Single(result.Items, item =>
             string.Equals(item.LocalPath, FullPath("public/build/app.js"), StringComparison.OrdinalIgnoreCase) &&
-            item.Action == DeploymentQueueAction.Upload));
+            item.Action == DeploymentQueueAction.Upload);
     }
 
     [Fact]
