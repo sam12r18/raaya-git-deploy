@@ -14,4 +14,5 @@ public sealed record DeploymentOperation(
 
 public sealed record DeploymentPlan(
     IReadOnlyList<DeploymentOperation> Operations,
-    bool IsDryRun);
+    bool IsDryRun,
+    DeploymentPlanContext? Context = null);
