@@ -53,4 +53,38 @@ public sealed class DeploymentPlannerTests
         Assert.True(plan.IsDryRun);
         Assert.All(plan.Operations, operation => Assert.Equal(DeploymentOperationKind.Upload, operation.Kind));
     }
+
+    [Fact]
+    public void Queue_plan_maps_delete_without_requiring_local_file()
+    {
+        var planner = new DeploymentPlanner();
+        var repositoryRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), $"repo-{Guid.NewGuid():N}"));
+        var deletedPath = Path.Combine(repositoryRoot, "gone.php");
+        var item = new DeploymentQueueItem(
+            deletedPath,
+            DeploymentQueueSource.GitDetected,
+            Action: DeploymentQueueAction.Delete);
+
+        var plan = planner.Plan(repositoryRoot, "/public_html", [item]);
+
+        var operation = Assert.Single(plan.Operations);
+        Assert.Equal(DeploymentOperationKind.Delete, operation.Kind);
+        Assert.Equal(deletedPath, operation.LocalPath);
+        Assert.Equal("/public_html/gone.php", operation.RemotePath);
+    }
+
+    [Fact]
+    public void Queue_plan_rejects_delete_path_outside_repository()
+    {
+        var planner = new DeploymentPlanner();
+        var repositoryRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), $"repo-{Guid.NewGuid():N}"));
+        var outsidePath = Path.GetFullPath(Path.Combine(repositoryRoot, "..", "outside.php"));
+        var item = new DeploymentQueueItem(
+            outsidePath,
+            DeploymentQueueSource.GitDetected,
+            Action: DeploymentQueueAction.Delete);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            planner.Plan(repositoryRoot, "/public_html", [item]));
+    }
 }
