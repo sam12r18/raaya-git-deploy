@@ -49,12 +49,51 @@ public sealed class GitRepositoryService : IGitRepositoryService
         return ParseCommitHistory(result.StandardOutput);
     }
 
+    public async Task<IReadOnlyList<GitCommitInfo>> GetCommitsBetweenAsync(
+        string repositoryPath,
+        string baseRef,
+        string targetRef,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseRef);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetRef);
+
+        var root = await RunRequiredAsync(repositoryPath, ["rev-parse", "--show-toplevel"], cancellationToken);
+        var baseCommit = await ResolveCommitAsync(root, baseRef, cancellationToken);
+        var targetCommit = await ResolveCommitAsync(root, targetRef, cancellationToken);
+        var format = $"%H{CommitFieldSeparator}%s{CommitFieldSeparator}%an{CommitFieldSeparator}%aI{CommitRecordSeparator}";
+        var arguments = new[] { "log", $"--format={format}", $"{baseCommit}..{targetCommit}" };
+        var result = await _runner.RunAsync(root, arguments, cancellationToken);
+        if (result.ExitCode != 0) throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
+        return ParseCommitHistory(result.StandardOutput);
+    }
+
     public async Task<IReadOnlyList<GitChange>> GetCommitChangesAsync(string repositoryPath, string commitSha, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
         var root = await RunRequiredAsync(repositoryPath, ["rev-parse", "--show-toplevel"], cancellationToken);
         var commit = await ResolveCommitAsync(root, commitSha, cancellationToken);
         var arguments = new[] { "diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", "-z", commit };
+        var result = await _runner.RunAsync(root, arguments, cancellationToken);
+        if (result.ExitCode != 0) throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
+        return GitNameStatusParser.Parse(result.StandardOutput);
+    }
+
+    public async Task<IReadOnlyList<GitChange>> GetChangesBetweenAsync(
+        string repositoryPath,
+        string baseRef,
+        string targetRef,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseRef);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetRef);
+
+        var root = await RunRequiredAsync(repositoryPath, ["rev-parse", "--show-toplevel"], cancellationToken);
+        var baseCommit = await ResolveCommitAsync(root, baseRef, cancellationToken);
+        var targetCommit = await ResolveCommitAsync(root, targetRef, cancellationToken);
+        var arguments = new[] { "diff", "--name-status", "-M", "-z", baseCommit, targetCommit };
         var result = await _runner.RunAsync(root, arguments, cancellationToken);
         if (result.ExitCode != 0) throw new InvalidOperationException(BuildGitFailureMessage(arguments, result));
         return GitNameStatusParser.Parse(result.StandardOutput);
