@@ -20,7 +20,8 @@ public interface IGitRepositoryService
         string repositoryPath,
         string baseRef,
         string targetRef,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<GitCommitInfo>>(Array.Empty<GitCommitInfo>());
 
     Task<IReadOnlyList<GitChange>> GetCommitChangesAsync(
         string repositoryPath,
@@ -32,7 +33,8 @@ public interface IGitRepositoryService
         string repositoryPath,
         string baseRef,
         string targetRef,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<GitChange>>(Array.Empty<GitChange>());
 
     Task<string> GetCommitFileDiffAsync(
         string repositoryPath,
