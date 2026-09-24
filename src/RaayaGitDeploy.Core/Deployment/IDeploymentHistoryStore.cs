@@ -6,7 +6,12 @@ public sealed record DeploymentHistoryEntry(
     string ServerProfileId,
     string ServerDisplayName,
     bool Succeeded,
-    IReadOnlyList<DeploymentItemResult> Items);
+    IReadOnlyList<DeploymentItemResult> Items,
+    string? RepositoryPath = null,
+    string? Branch = null,
+    string? FromHead = null,
+    string? ToHead = null,
+    DateTimeOffset? FinishedAt = null);
 
 public interface IDeploymentHistoryStore
 {
