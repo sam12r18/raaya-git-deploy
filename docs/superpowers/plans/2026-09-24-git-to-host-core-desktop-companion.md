@@ -1,97 +1,114 @@
-# Git-to-Host Core, Desktop & Companion Implementation Plan
+# Git-to-Host Phase 1 Core Automation Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Turn Raaya Git Deploy from a manual file-transfer workflow into a Git-aware deployment workflow that automatically derives the pending deployment range from the last successful deployed commit, builds a reviewable queue, performs a target-SHA-aware Dry Run, deploys safely, records the new baseline, and exposes the same safe intent to the Mobile companion.
+**Goal:** Build the first working automation spine for Raaya Git Deploy: track the last successful deployed commit per repository/server profile, safely update Git, derive the full pending commit/file range, auto-build a deployment queue (including generated-output rules), pin Dry Run to a target SHA, and advance the baseline only after full success.
 
-**Architecture:** Extend the existing Git, Deployment, History and Companion contracts rather than creating a second deployment stack. Desktop owns local Git mutation and FTP/FTPS/SFTP execution; shared Core owns transport-neutral pending-range, queue and history semantics; Mobile consumes agent-issued repository/profile/plan identifiers and never receives host credentials. Android application-host/Keystore wiring is intentionally a separate follow-up plan because it is an independent platform subsystem.
+**Architecture:** Reuse the current `IGitRepositoryService`, `DeploymentPlanner`, `DeploymentExecutor`, `IDeploymentHistoryStore`, server profiles and transport abstraction. This phase changes shared Core + Infrastructure only far enough to produce a deterministic pending deployment plan; Desktop UI and Mobile companion consume these contracts in follow-up plans. Android application-host/Keystore remains a separate platform plan.
 
-**Tech Stack:** .NET 10 / C# 14, WinUI 3, git.exe via existing process runner, existing Core/Infrastructure/Presentation/App layers, xUnit, System.Text.Json, existing SFTP + FluentFTP transport adapters.
+**Tech Stack:** .NET 10 / C# 14, git.exe through the existing `IGitProcessRunner`, System.Text.Json, xUnit, existing Core/Infrastructure test projects.
 
 **Spec:** `docs/superpowers/specs/2026-09-24-git-to-host-deployment-workflow-design.md`
 
 ## Global Constraints
 
-- Primary Desktop flow: **Open Repository → Update/Pull → Detect Pending Deployment → Review → Auto Queue → Dry Run → Deploy → Record Successful HEAD → History**.
-- Canonical deployment range is `last_successfully_deployed_head(repository, profile)..current_local_head`, not merely the last Pull range.
-- Multiple Pulls before deployment must accumulate; failed/partial/cancelled deployment must not advance the successful baseline.
-- Automated Pull requires a clean working tree and fast-forward-only behavior; divergence/conflict stops without implicit merge.
-- FTP/FTPS/SFTP credentials stay inside Desktop/agent Infrastructure; transport-specific details must not leak into shared deployment/history models.
-- Queue provenance must distinguish Git-detected, generated/rule-based and manual entries.
-- Delete/rename-derived remote deletes are destructive, visible in Dry Run and explicitly confirmed.
-- Mobile uses agent-issued repository/profile/plan identifiers, HTTPS authorization and explicit confirmation; it must not accept or store raw SSH/FTP/FTPS/Git credentials.
-- Do not modify or merge `feat/git-host-auto-deploy` blindly; reconcile only reviewed shared contracts.
-- Existing JSON history must remain readable after schema expansion.
+- Canonical pending range is `last_successfully_deployed_head(repository, profile)..current_local_head`, not the most recent Pull range.
+- Multiple Pulls before deployment must accumulate into one pending range.
+- Failed, partial, blocked or cancelled deployment must never advance the successful baseline.
+- Automated Pull requires a clean working tree, configured upstream and fast-forward-only behavior.
+- Pending deployment contains committed Git state only; uncommitted working-tree files are not silently included.
+- Queue provenance distinguishes Git-detected, generated-rule and manual items.
+- Added/Modified map to Upload; Deleted maps to Delete; Renamed maps to Upload(new) + Delete(old).
+- Delete operations remain subject to existing upload-before-delete safety.
+- Generated rules only include files that already exist locally; this phase does not auto-run build commands.
+- Dry Run is pinned to an exact repository/profile/from/to SHA context.
+- Existing history JSON remains readable.
+- FTP/FTPS/SFTP credentials remain Infrastructure-only and are not added to shared plan/history models.
+- Do not change or merge `feat/git-host-auto-deploy` in this plan.
 
 ## Review Focus
 
-1. **Legacy history JSON with no Git metadata** — loads as a legacy entry instead of crashing; it cannot become a Git baseline until repository/profile metadata exists.
-2. **Repository path casing / normalization on Windows** — the same repository opened with equivalent path casing still resolves the correct profile baseline.
-3. **HEAD changes after Dry Run** — execution is rejected or remains explicitly pinned; it must never silently advance a newer SHA than the reviewed target.
-4. **Rename/delete with upload failure** — delete phase remains blocked by the existing upload-before-delete safety rule and baseline does not advance.
-5. **Mobile attempts to invent arbitrary paths** — the new plan-based companion API rejects client-supplied filesystem paths and only accepts authorized plan/item IDs.
+1. **Legacy history JSON** with no Git metadata loads successfully but cannot become a deployed Git baseline.
+2. **Equivalent Windows repository paths** with casing differences resolve the same baseline.
+3. **Several Pulls before Deploy** still produce the full original deployed HEAD → current HEAD range.
+4. **Rename plus failed upload** keeps the old-path delete blocked and does not advance the baseline.
+5. **HEAD changes after Dry Run** rejects execution of the stale reviewed plan.
 
 ---
 
-### Task 1: Add Git-aware deployment history and baseline semantics
+### Task 1: Persist Git-aware deployment history and resolve the last successful baseline
 
 **Files:**
 - Modify: `src/RaayaGitDeploy.Core/Deployment/IDeploymentHistoryStore.cs`
 - Create: `src/RaayaGitDeploy.Core/Deployment/DeploymentBaselineService.cs`
+- Modify: `src/RaayaGitDeploy.Infrastructure/Deployment/JsonDeploymentHistoryStore.cs`
 - Create: `tests/RaayaGitDeploy.Core.Tests/Deployment/DeploymentBaselineServiceTests.cs`
-- Modify existing history-construction tests under `tests/RaayaGitDeploy.Core.Tests/Deployment/` only where constructor compatibility needs verification.
+- Create or extend: `tests/RaayaGitDeploy.Infrastructure.Tests/Deployment/JsonDeploymentHistoryStoreTests.cs`
 
 **Interfaces:**
-- Consumes: existing `IDeploymentHistoryStore.LoadAsync` and `DeploymentHistoryEntry`.
-- Produces: expanded backward-compatible `DeploymentHistoryEntry` and `DeploymentBaselineService.GetLastSuccessfulAsync(string repositoryPath, string serverProfileId, CancellationToken)`.
+- Produces `DeploymentHistoryEntry.RepositoryPath`, `Branch`, `FromHead`, `ToHead`, `FinishedAt` as optional trailing metadata.
+- Produces `DeploymentBaselineService.GetLastSuccessfulAsync(string repositoryPath, string serverProfileId, CancellationToken)`.
 
-- [ ] **Step 1: Write failing baseline tests**
+- [ ] **Step 1: Write failing Core tests**
+
+Add this helper and tests to `DeploymentBaselineServiceTests.cs`:
 
 ```csharp
-[Fact]
-public async Task Returns_latest_successful_entry_for_repository_and_profile()
+private sealed class MemoryHistoryStore(IReadOnlyList<DeploymentHistoryEntry> entries) : IDeploymentHistoryStore
 {
-    var store = new FakeHistoryStore(
-    [
-        Entry("1", succeeded: true,  repo: @"C:\work\app", profile: "prod", toHead: "aaa", started: "2026-09-24T10:00:00Z"),
-        Entry("2", succeeded: false, repo: @"C:\work\app", profile: "prod", toHead: "bbb", started: "2026-09-24T11:00:00Z"),
-        Entry("3", succeeded: true,  repo: @"c:\WORK\app", profile: "prod", toHead: "ccc", started: "2026-09-24T12:00:00Z")
+    public Task<IReadOnlyList<DeploymentHistoryEntry>> LoadAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(entries);
+
+    public Task AppendAsync(DeploymentHistoryEntry entry, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+}
+
+private static DeploymentHistoryEntry Entry(
+    string id, bool succeeded, string repositoryPath, string profileId, string toHead, DateTimeOffset startedAt) =>
+    new(id, startedAt, profileId, "Production", succeeded, [], repositoryPath, "main", "base", toHead, startedAt.AddMinutes(1));
+
+[Fact]
+public async Task Returns_latest_successful_git_entry_for_equivalent_windows_path()
+{
+    var store = new MemoryHistoryStore([
+        Entry("1", true,  @"C:\work\app", "prod", "aaa", DateTimeOffset.Parse("2026-09-24T10:00:00Z")),
+        Entry("2", false, @"C:\work\app", "prod", "bbb", DateTimeOffset.Parse("2026-09-24T11:00:00Z")),
+        Entry("3", true,  @"c:\WORK\app", "prod", "ccc", DateTimeOffset.Parse("2026-09-24T12:00:00Z"))
     ]);
 
-    var service = new DeploymentBaselineService(store);
-    var baseline = await service.GetLastSuccessfulAsync(@"C:\work\app", "prod", CancellationToken.None);
+    var baseline = await new DeploymentBaselineService(store)
+        .GetLastSuccessfulAsync(@"C:\work\app", "prod", CancellationToken.None);
 
     Assert.NotNull(baseline);
     Assert.Equal("ccc", baseline!.ToHead);
 }
 
 [Fact]
-public async Task Ignores_failed_and_legacy_entries_as_successful_git_baselines()
+public async Task Legacy_and_failed_entries_do_not_form_git_baseline()
 {
-    var store = new FakeHistoryStore(
-    [
+    var store = new MemoryHistoryStore([
         new DeploymentHistoryEntry("legacy", DateTimeOffset.UtcNow, "prod", "Production", true, []),
-        Entry("failed", false, @"C:\work\app", "prod", "bbb", "2026-09-24T12:00:00Z")
+        Entry("failed", false, @"C:\work\app", "prod", "bbb", DateTimeOffset.UtcNow)
     ]);
 
-    var service = new DeploymentBaselineService(store);
-    Assert.Null(await service.GetLastSuccessfulAsync(@"C:\work\app", "prod", CancellationToken.None));
+    var baseline = await new DeploymentBaselineService(store)
+        .GetLastSuccessfulAsync(@"C:\work\app", "prod", CancellationToken.None);
+
+    Assert.Null(baseline);
 }
 ```
 
-- [ ] **Step 2: Run the focused tests and verify failure**
-
-Run:
+- [ ] **Step 2: Run the focused Core tests and confirm they fail**
 
 ```powershell
 dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj -c Debug --filter DeploymentBaselineServiceTests
 ```
 
-Expected: FAIL because Git metadata and `DeploymentBaselineService` do not exist yet.
+Expected: FAIL because Git metadata and `DeploymentBaselineService` do not exist.
 
-- [ ] **Step 3: Expand history without breaking old callers/JSON**
+- [ ] **Step 3: Expand `DeploymentHistoryEntry` compatibly**
 
-Use optional trailing metadata so current constructor calls and legacy JSON remain valid:
+Use optional trailing fields so existing constructors and old JSON remain valid:
 
 ```csharp
 public sealed record DeploymentHistoryEntry(
@@ -108,7 +125,7 @@ public sealed record DeploymentHistoryEntry(
     DateTimeOffset? FinishedAt = null);
 ```
 
-Add a focused resolver:
+- [ ] **Step 4: Implement the baseline resolver**
 
 ```csharp
 public sealed class DeploymentBaselineService(IDeploymentHistoryStore store)
@@ -118,103 +135,53 @@ public sealed class DeploymentBaselineService(IDeploymentHistoryStore store)
         string serverProfileId,
         CancellationToken cancellationToken)
     {
-        var normalizedRepository = Path.GetFullPath(repositoryPath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var target = Normalize(repositoryPath);
+        var entries = await store.LoadAsync(cancellationToken);
 
-        return (await store.LoadAsync(cancellationToken))
+        return entries
             .Where(entry => entry.Succeeded &&
                             !string.IsNullOrWhiteSpace(entry.RepositoryPath) &&
                             !string.IsNullOrWhiteSpace(entry.ToHead) &&
-                            string.Equals(Path.GetFullPath(entry.RepositoryPath!).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), normalizedRepository, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(Normalize(entry.RepositoryPath!), target, StringComparison.OrdinalIgnoreCase) &&
                             string.Equals(entry.ServerProfileId, serverProfileId, StringComparison.Ordinal))
             .OrderByDescending(entry => entry.FinishedAt ?? entry.StartedAt)
             .FirstOrDefault();
     }
+
+    private static string Normalize(string path) =>
+        Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 }
 ```
 
-- [ ] **Step 4: Run Core tests**
+- [ ] **Step 5: Add legacy JSON and round-trip Infrastructure tests**
+
+The legacy test writes this exact shape and asserts nullable Git fields are null after load:
+
+```json
+[{"Id":"legacy-1","StartedAt":"2026-09-20T10:00:00+00:00","ServerProfileId":"prod","ServerDisplayName":"Production","Succeeded":true,"Items":[]}]
+```
+
+The round-trip test appends an entry with repository `C:\work\app`, branch `main`, `FromHead="aaa"`, `ToHead="bbb"`, reloads it, and asserts those five Git/timing fields survive unchanged.
+
+- [ ] **Step 6: Run Core + Infrastructure suites**
 
 ```powershell
 dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj -c Debug
-```
-
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/RaayaGitDeploy.Core/Deployment tests/RaayaGitDeploy.Core.Tests/Deployment
-git commit -m "feat(core): track deployed git baseline in history"
-```
-
----
-
-### Task 2: Make JSON history schema migration backward-compatible
-
-**Files:**
-- Modify: `src/RaayaGitDeploy.Infrastructure/Deployment/JsonDeploymentHistoryStore.cs`
-- Create or modify: `tests/RaayaGitDeploy.Infrastructure.Tests/Deployment/JsonDeploymentHistoryStoreTests.cs`
-
-**Interfaces:**
-- Consumes: expanded `DeploymentHistoryEntry` from Task 1.
-- Produces: persisted/readable Git metadata while preserving legacy entries.
-
-- [ ] **Step 1: Add a legacy JSON read test**
-
-```csharp
-[Fact]
-public async Task LoadAsync_reads_legacy_entry_without_git_metadata()
-{
-    await File.WriteAllTextAsync(_path, """
-    [{
-      "Id":"legacy-1",
-      "StartedAt":"2026-09-20T10:00:00+00:00",
-      "ServerProfileId":"prod",
-      "ServerDisplayName":"Production",
-      "Succeeded":true,
-      "Items":[]
-    }]
-    """);
-
-    var entries = await new JsonDeploymentHistoryStore(_path).LoadAsync(CancellationToken.None);
-
-    Assert.Single(entries);
-    Assert.Null(entries[0].RepositoryPath);
-    Assert.Null(entries[0].ToHead);
-}
-```
-
-Add a round-trip test asserting `RepositoryPath`, `Branch`, `FromHead`, `ToHead`, `FinishedAt` survive append/load.
-
-- [ ] **Step 2: Run Infrastructure tests and verify the new assertions fail if store options need adjustment**
-
-```powershell
-dotnet test tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj -c Debug --filter JsonDeploymentHistoryStoreTests
-```
-
-- [ ] **Step 3: Update store serialization only as needed**
-
-Keep `System.Text.Json` tolerant of absent optional properties; do not introduce a destructive migration. Ensure null/legacy metadata is preserved and append still uses atomic temp-file replacement if the current store already does so.
-
-- [ ] **Step 4: Run Infrastructure tests**
-
-```powershell
 dotnet test tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj -c Debug
 ```
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/RaayaGitDeploy.Infrastructure/Deployment/JsonDeploymentHistoryStore.cs tests/RaayaGitDeploy.Infrastructure.Tests/Deployment
-git commit -m "feat(history): persist git deployment baseline metadata"
+git add src/RaayaGitDeploy.Core/Deployment/IDeploymentHistoryStore.cs src/RaayaGitDeploy.Core/Deployment/DeploymentBaselineService.cs src/RaayaGitDeploy.Infrastructure/Deployment/JsonDeploymentHistoryStore.cs tests/RaayaGitDeploy.Core.Tests/Deployment tests/RaayaGitDeploy.Infrastructure.Tests/Deployment
+git commit -m "feat(core): track last successful deployed head"
 ```
 
 ---
 
-### Task 3: Add safe fast-forward-only Desktop Git Update/Pull
+### Task 2: Add safe fast-forward-only Git Update/Pull
 
 **Files:**
 - Create: `src/RaayaGitDeploy.Core/Git/IGitUpdateService.cs`
@@ -222,7 +189,6 @@ git commit -m "feat(history): persist git deployment baseline metadata"
 - Create: `tests/RaayaGitDeploy.Infrastructure.Tests/GitCli/GitUpdateServiceTests.cs`
 
 **Interfaces:**
-- Produces:
 
 ```csharp
 public sealed record GitUpdateResult(
@@ -234,91 +200,200 @@ public sealed record GitUpdateResult(
 
 public interface IGitUpdateService
 {
-    Task<GitUpdateResult> UpdateFastForwardOnlyAsync(string repositoryPath, CancellationToken cancellationToken);
+    Task<GitUpdateResult> UpdateFastForwardOnlyAsync(
+        string repositoryPath,
+        CancellationToken cancellationToken);
 }
 ```
 
-- [ ] **Step 1: Write process-sequence tests**
+- [ ] **Step 1: Write failing command-sequence tests**
 
-Test three cases using the existing fake/stub `IGitProcessRunner` pattern in Infrastructure tests:
+Use a recording fake implementing the existing `IGitProcessRunner` contract and feed results in call order. Pin these command sequences exactly:
+
+```csharp
+var successfulCommands = new[]
+{
+    "status --porcelain=v2 -z --untracked-files=all",
+    "branch --show-current",
+    "rev-parse --abbrev-ref --symbolic-full-name @{u}",
+    "rev-parse HEAD",
+    "pull --ff-only",
+    "rev-parse HEAD"
+};
+```
+
+Tests:
 
 ```csharp
 [Fact]
-public async Task Rejects_dirty_working_tree_before_fetch_or_pull() { /* arrange porcelain output, assert InvalidOperationException and no pull command */ }
+public async Task Dirty_working_tree_stops_before_upstream_or_pull()
+{
+    var runner = RecordingGitProcessRunner.WithResults(
+        new GitCommandResult(0, "? untracked.txt\0", ""));
+
+    var service = new GitUpdateService(runner);
+    await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        service.UpdateFastForwardOnlyAsync(@"C:\repo", CancellationToken.None));
+
+    Assert.Single(runner.Calls);
+    Assert.Equal("status --porcelain=v2 -z --untracked-files=all", runner.Calls[0]);
+}
 
 [Fact]
-public async Task Rejects_repository_without_upstream() { /* upstream rev-parse exits non-zero, assert actionable error */ }
+public async Task Successful_update_uses_ff_only_and_returns_before_after_heads()
+{
+    var runner = RecordingGitProcessRunner.WithResults(
+        new GitCommandResult(0, "", ""),
+        new GitCommandResult(0, "main\n", ""),
+        new GitCommandResult(0, "origin/main\n", ""),
+        new GitCommandResult(0, "aaaaaaaa\n", ""),
+        new GitCommandResult(0, "Updating aaaaaaaa..bbbbbbbb\n", ""),
+        new GitCommandResult(0, "bbbbbbbb\n", ""));
 
-[Fact]
-public async Task Uses_fast_forward_only_and_returns_before_after_heads() { /* old abc, pull --ff-only, new def */ }
+    var result = await new GitUpdateService(runner)
+        .UpdateFastForwardOnlyAsync(@"C:\repo", CancellationToken.None);
+
+    Assert.Equal("aaaaaaaa", result.OldHead);
+    Assert.Equal("bbbbbbbb", result.NewHead);
+    Assert.True(result.Changed);
+    Assert.Contains("pull --ff-only", runner.Calls);
+}
 ```
 
-The successful test must assert the mutation command contains `pull --ff-only` and never plain `pull`.
+At the bottom of the test file, define `RecordingGitProcessRunner` with a `Queue<GitCommandResult>`, a public `List<string> Calls`, and `RunAsync` that records `string.Join(' ', arguments)` before dequeuing the next result.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [ ] **Step 2: Run focused tests and confirm failure**
 
 ```powershell
 dotnet test tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj -c Debug --filter GitUpdateServiceTests
 ```
 
-- [ ] **Step 3: Implement safe update policy**
+- [ ] **Step 3: Implement update policy**
 
-The service sequence is:
+Implementation order:
 
 ```text
-git status --porcelain=v2 -z
-→ require no records
-git rev-parse --abbrev-ref HEAD
-→ reject detached HEAD
+git status --porcelain=v2 -z --untracked-files=all
+→ require empty output
+git branch --show-current
+→ require non-empty branch
 git rev-parse --abbrev-ref --symbolic-full-name @{u}
-→ require upstream
+→ require exit code 0 and non-empty upstream
 git rev-parse HEAD
 → OldHead
 git pull --ff-only
-→ reject non-zero exit; do not merge/rebase implicitly
+→ require exit code 0
 git rev-parse HEAD
 → NewHead
 ```
 
-Return `Changed = !StringComparer.Ordinal.Equals(OldHead, NewHead)`.
+For every non-zero required command, throw `InvalidOperationException` containing the failed command and stderr/stdout message. Do not run merge/rebase fallback.
 
-- [ ] **Step 4: Run all Infrastructure tests**
+- [ ] **Step 4: Run Infrastructure suite**
 
 ```powershell
 dotnet test tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj -c Debug
 ```
 
+Expected: PASS.
+
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/RaayaGitDeploy.Core/Git/IGitUpdateService.cs src/RaayaGitDeploy.Infrastructure/GitCli/GitUpdateService.cs tests/RaayaGitDeploy.Infrastructure.Tests/GitCli/GitUpdateServiceTests.cs
-git commit -m "feat(git): add safe fast-forward repository update"
+git commit -m "feat(git): add safe fast-forward update"
 ```
 
 ---
 
-### Task 4: Add exact commit-range queries and pending deployment snapshot
+### Task 3: Add exact committed range queries
 
 **Files:**
 - Modify: `src/RaayaGitDeploy.Core/Git/IGitRepositoryService.cs`
 - Modify: `src/RaayaGitDeploy.Infrastructure/GitCli/GitRepositoryService.cs`
-- Create: `src/RaayaGitDeploy.Core/Deployment/PendingDeploymentSnapshot.cs`
-- Create: `src/RaayaGitDeploy.Core/Deployment/PendingDeploymentService.cs`
-- Create: `tests/RaayaGitDeploy.Core.Tests/Deployment/PendingDeploymentServiceTests.cs`
-- Modify/add Infrastructure Git tests for exact range parsing.
+- Extend: `tests/RaayaGitDeploy.Infrastructure.Tests/GitCli/GitRepositoryServiceTests.cs`
 
 **Interfaces:**
-- Add to `IGitRepositoryService`:
 
 ```csharp
 Task<IReadOnlyList<GitCommitInfo>> GetCommitsBetweenAsync(
-    string repositoryPath, string baseRef, string targetRef, CancellationToken cancellationToken);
+    string repositoryPath,
+    string baseRef,
+    string targetRef,
+    CancellationToken cancellationToken);
 
 Task<IReadOnlyList<GitChange>> GetChangesBetweenAsync(
-    string repositoryPath, string baseRef, string targetRef, CancellationToken cancellationToken);
+    string repositoryPath,
+    string baseRef,
+    string targetRef,
+    CancellationToken cancellationToken);
 ```
 
-- Produce:
+- [ ] **Step 1: Add exact-range tests**
+
+The commit query test must assert use of the same machine-readable format already used by `GetRecentCommitsAsync`:
+
+```csharp
+var format = "%H\u001f%s\u001f%an\u001f%aI\u001e";
+var expected = $"log --format={format} aaaaaaaa..cccccccc";
+```
+
+The change query test must assert:
+
+```text
+diff --name-status -M -z aaaaaaaa cccccccc
+```
+
+Feed a rename payload such as `R100\0old.php\0new.php\0` and assert `GitChange("new.php", Renamed, "old.php")`.
+
+- [ ] **Step 2: Run focused Infrastructure tests and confirm failure**
+
+```powershell
+dotnet test tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj -c Debug --filter GitRepositoryServiceTests
+```
+
+- [ ] **Step 3: Implement both range methods**
+
+Resolve both refs through the existing `ResolveCommitAsync`. For commits use:
+
+```csharp
+var format = $"%H{CommitFieldSeparator}%s{CommitFieldSeparator}%an{CommitFieldSeparator}%aI{CommitRecordSeparator}";
+var arguments = new[] { "log", $"--format={format}", $"{baseCommit}..{targetCommit}" };
+```
+
+For changed paths use:
+
+```csharp
+var arguments = new[] { "diff", "--name-status", "-M", "-z", baseCommit, targetCommit };
+```
+
+Parse with the existing `ParseCommitHistory` and `GitNameStatusParser` paths. These methods must not inspect the working tree.
+
+- [ ] **Step 4: Run Infrastructure suite**
+
+```powershell
+dotnet test tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj -c Debug
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/RaayaGitDeploy.Core/Git/IGitRepositoryService.cs src/RaayaGitDeploy.Infrastructure/GitCli/GitRepositoryService.cs tests/RaayaGitDeploy.Infrastructure.Tests/GitCli
+git commit -m "feat(git): query exact deployment commit ranges"
+```
+
+---
+
+### Task 4: Build pending deployment snapshot from deployed HEAD to current HEAD
+
+**Files:**
+- Create: `src/RaayaGitDeploy.Core/Deployment/PendingDeploymentSnapshot.cs`
+- Create: `src/RaayaGitDeploy.Core/Deployment/PendingDeploymentService.cs`
+- Create: `tests/RaayaGitDeploy.Core.Tests/Deployment/PendingDeploymentServiceTests.cs`
+
+**Interfaces:**
 
 ```csharp
 public sealed record PendingDeploymentSnapshot(
@@ -331,64 +406,97 @@ public sealed record PendingDeploymentSnapshot(
     bool RequiresBaseline);
 ```
 
-- [ ] **Step 1: Add tests for multiple Pull accumulation and missing baseline**
+`PendingDeploymentService` consumes `IGitRepositoryService` + `DeploymentBaselineService`.
+
+- [ ] **Step 1: Write failing service tests with explicit fakes**
+
+Create `FakeGitRepositoryService : IGitRepositoryService` in the test file with configurable `Context`, `CommitsBetween`, `ChangesBetween`, and captured `RequestedBase`/`RequestedTarget`; non-used interface members throw `NotSupportedException`.
+
+Add:
 
 ```csharp
 [Fact]
-public async Task Builds_full_range_from_last_successful_deploy_to_current_head()
+public async Task Multiple_updates_still_use_last_deployed_head_as_range_start()
 {
-    // baseline A, current C; assert repository service queried A..C, not B..C.
+    var git = FakeGitRepositoryService.AtHead("cccccccc");
+    git.CommitsBetween = [new("bbbbbbbb", "bbbbbbbb", "B", "Dev", DateTimeOffset.UtcNow),
+                          new("cccccccc", "cccccccc", "C", "Dev", DateTimeOffset.UtcNow)];
+    git.ChangesBetween = [new("app.php", GitChangeKind.Modified)];
+
+    var history = new MemoryHistoryStore([
+        new DeploymentHistoryEntry("deploy-a", DateTimeOffset.UtcNow, "prod", "Production", true, [], @"C:\repo", "main", null, "aaaaaaaa")
+    ]);
+
+    var service = new PendingDeploymentService(git, new DeploymentBaselineService(history));
+    var snapshot = await service.BuildAsync(@"C:\repo", "prod", CancellationToken.None);
+
+    Assert.Equal("aaaaaaaa", snapshot.FromHead);
+    Assert.Equal("cccccccc", snapshot.ToHead);
+    Assert.Equal("aaaaaaaa", git.RequestedBase);
+    Assert.Equal("cccccccc", git.RequestedTarget);
 }
 
 [Fact]
-public async Task Returns_baseline_required_when_profile_has_no_git_aware_success_history()
+public async Task Missing_git_aware_baseline_returns_baseline_required_without_guessing()
 {
-    // assert RequiresBaseline=true and no guessed FromHead.
+    var git = FakeGitRepositoryService.AtHead("cccccccc");
+    var service = new PendingDeploymentService(git, new DeploymentBaselineService(new MemoryHistoryStore([])));
+
+    var snapshot = await service.BuildAsync(@"C:\repo", "prod", CancellationToken.None);
+
+    Assert.True(snapshot.RequiresBaseline);
+    Assert.Null(snapshot.FromHead);
+    Assert.Empty(snapshot.Commits);
+    Assert.Empty(snapshot.Changes);
 }
 ```
 
-- [ ] **Step 2: Run Core focused tests and verify failure**
+Reuse the `MemoryHistoryStore` shape from Task 1 in this test file.
+
+- [ ] **Step 2: Run focused Core tests and confirm failure**
 
 ```powershell
 dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj -c Debug --filter PendingDeploymentServiceTests
 ```
 
-- [ ] **Step 3: Implement exact Git range parsing**
+- [ ] **Step 3: Implement snapshot generation**
 
-Use machine-readable commands in `GitRepositoryService`:
+Algorithm:
 
 ```text
-git log --format=<existing NUL-safe commit format> baseRef..targetRef
-git diff --name-status -z --find-renames baseRef targetRef
+context = GetContextAsync(repository)
+baseline = GetLastSuccessfulAsync(context.RootPath, profileId)
+if baseline == null → RequiresBaseline=true, FromHead=null, no range query
+if baseline.ToHead == context.HeadSha → empty commits/changes, RequiresBaseline=false
+otherwise → GetCommitsBetweenAsync(baseline.ToHead, context.HeadSha)
+          → GetChangesBetweenAsync(baseline.ToHead, context.HeadSha)
 ```
 
-Reuse existing `GitCommitInfo`, `GitChange`, rename parsing and path safety conventions rather than parsing human-readable output.
+Do not call `GetWorkingTreeChangesAsync` from this service.
 
-- [ ] **Step 4: Implement `PendingDeploymentService`**
-
-It loads repository context, resolves profile baseline through `DeploymentBaselineService`, then queries exact committed range. It must not include working-tree-only changes in a deployment range.
-
-- [ ] **Step 5: Run Core + Infrastructure suites**
+- [ ] **Step 4: Run Core suite**
 
 ```powershell
 dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj -c Debug
-dotnet test tests/RaayaGitDeploy.Infrastructure.Tests/RaayaGitDeploy.Infrastructure.Tests.csproj -c Debug
 ```
 
-- [ ] **Step 6: Commit**
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/RaayaGitDeploy.Core/Git src/RaayaGitDeploy.Core/Deployment src/RaayaGitDeploy.Infrastructure/GitCli tests/RaayaGitDeploy.Core.Tests tests/RaayaGitDeploy.Infrastructure.Tests
-git commit -m "feat(deploy): derive pending range from deployed head"
+git add src/RaayaGitDeploy.Core/Deployment/PendingDeploymentSnapshot.cs src/RaayaGitDeploy.Core/Deployment/PendingDeploymentService.cs tests/RaayaGitDeploy.Core.Tests/Deployment/PendingDeploymentServiceTests.cs
+git commit -m "feat(deploy): derive pending deployment range"
 ```
 
 ---
 
-### Task 5: Convert Git delta into an auto-populated deployment queue with provenance
+### Task 5: Auto-build queue from Git changes and generated-output rules
 
 **Files:**
 - Modify: `src/RaayaGitDeploy.Core/Deployment/DeploymentQueueItem.cs`
 - Modify: `src/RaayaGitDeploy.Core/Deployment/DeploymentPlanner.cs`
+- Create: `src/RaayaGitDeploy.Core/Deployment/DeploymentRuleSet.cs`
 - Create: `src/RaayaGitDeploy.Core/Deployment/PendingDeploymentQueueBuilder.cs`
 - Create: `tests/RaayaGitDeploy.Core.Tests/Deployment/PendingDeploymentQueueBuilderTests.cs`
 - Extend: `tests/RaayaGitDeploy.Core.Tests/Deployment/DeploymentPlannerTests.cs`
@@ -398,7 +506,7 @@ git commit -m "feat(deploy): derive pending range from deployed head"
 ```csharp
 public enum DeploymentQueueSource
 {
-    GitSelection, // retain for compatibility
+    GitSelection,
     GitDetected,
     GeneratedRule,
     ManualFile,
@@ -416,38 +524,51 @@ public sealed record DeploymentQueueItem(
     DeploymentQueueSource Source,
     string? RemotePath = null,
     DeploymentQueueAction Action = DeploymentQueueAction.Upload);
+
+public sealed record DeploymentRuleSet(IReadOnlyList<string> GeneratedPaths);
 ```
 
-- [ ] **Step 1: Write mapping tests**
+`GeneratedPaths` in Phase 1 are repository-relative literal files/directories, for example `public/build`. Directory rules recursively include existing files beneath that directory; missing generated paths produce a warning returned by the builder rather than silently disappearing.
 
-Assert:
+- [ ] **Step 1: Write Git mapping tests**
 
-```text
-Added     → Upload new path / GitDetected
-Modified  → Upload path / GitDetected
-Deleted   → Delete old path / GitDetected
-Renamed   → Upload new path + Delete OriginalPath / GitDetected
-```
-
-Add a deduplication test where the same normalized upload path appears as `GitDetected` and `GeneratedRule`; expected one upload operation with deterministic provenance precedence `Manual > GeneratedRule > GitDetected` only when an explicit higher-priority source exists.
-
-- [ ] **Step 2: Add planner delete tests**
+Given changes:
 
 ```csharp
-[Fact]
-public void Delete_item_does_not_require_local_file_to_exist_and_maps_inside_remote_root() { }
-
-[Fact]
-public void Delete_item_outside_repository_is_rejected() { }
+var changes = new GitChange[]
+{
+    new("new.php", GitChangeKind.Added),
+    new("app.php", GitChangeKind.Modified),
+    new("gone.php", GitChangeKind.Deleted),
+    new("renamed.php", GitChangeKind.Renamed, "old.php")
+};
 ```
 
-- [ ] **Step 3: Run focused Core tests and verify failure**
+Assert queue contains exactly:
+
+```text
+Upload new.php      / GitDetected
+Upload app.php      / GitDetected
+Delete gone.php     / GitDetected
+Upload renamed.php  / GitDetected
+Delete old.php      / GitDetected
+```
+
+- [ ] **Step 2: Write generated-rule and deduplication tests**
+
+Create a temp repository with `public/build/app.js` and `public/build/app.css`; rule `public/build` must add both as `GeneratedRule` uploads. If `app.js` is already a GitDetected upload, assert only one upload for the normalized path and its source is `GeneratedRule`. Add a missing-rule test asserting warning text contains the missing repository-relative path.
+
+- [ ] **Step 3: Write planner delete tests**
+
+A delete item for `gone.php` must map to `/remote/gone.php` without requiring the local file to exist. A delete item whose local path resolves outside repository root must throw `InvalidOperationException`.
+
+- [ ] **Step 4: Run focused Core tests and confirm failure**
 
 ```powershell
 dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj -c Debug --filter "PendingDeploymentQueueBuilderTests|DeploymentPlannerTests"
 ```
 
-- [ ] **Step 4: Implement queue builder and queue-aware planner overload**
+- [ ] **Step 5: Implement queue builder and planner overload**
 
 Add:
 
@@ -459,24 +580,28 @@ public DeploymentPlan Plan(
     bool dryRun = false)
 ```
 
-For `Delete`, compute containment and remote mapping from the repository-relative path but do not require local existence. Keep current string-path overload delegating to upload queue items for backward compatibility.
+For `Upload`, emit `DeploymentOperationKind.Upload`; for `Delete`, emit `DeploymentOperationKind.Delete`. Preserve the existing string-path overload by wrapping paths as upload items.
 
-- [ ] **Step 5: Run Core suite**
+Normalize/dedupe uploads with `Path.GetFullPath`. Generated-rule source outranks GitDetected for identical upload paths because it explains why a build artifact is intentionally included; explicit manual items remain intact as user intent.
+
+- [ ] **Step 6: Run Core suite**
 
 ```powershell
 dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj -c Debug
 ```
 
-- [ ] **Step 6: Commit**
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/RaayaGitDeploy.Core/Deployment tests/RaayaGitDeploy.Core.Tests/Deployment
-git commit -m "feat(deploy): auto-build queue from git delta"
+git commit -m "feat(deploy): auto-build queue from pending git changes"
 ```
 
 ---
 
-### Task 6: Make Dry Run SHA-aware and protect the deployed baseline
+### Task 6: Pin Dry Run to SHA and advance baseline only after full success
 
 **Files:**
 - Modify: `src/RaayaGitDeploy.Core/Deployment/DeploymentPlan.cs`
@@ -500,292 +625,43 @@ public sealed record DeploymentPlan(
     DeploymentPlanContext? Context = null);
 ```
 
-`DeploymentRunCoordinator` owns the transition from reviewed preview to actual execution/history append.
+`DeploymentRunCoordinator` consumes `IGitRepositoryService`, `DeploymentExecutor`, `IDeploymentHistoryStore`.
 
-- [ ] **Step 1: Write stale-preview and baseline tests**
+- [ ] **Step 1: Write stale-preview test**
 
-```csharp
-[Fact]
-public async Task Rejects_execution_when_current_head_differs_from_reviewed_target() { /* plan C, current D */ }
+Build a plan pinned to `ToHead="cccccccc"`; configure fake Git context at `dddddddd`; call coordinator execution and assert `InvalidOperationException` before `DeploymentExecutor.ExecuteAsync` is invoked.
 
-[Fact]
-public async Task Failed_result_is_recorded_but_does_not_create_successful_C_baseline() { }
+- [ ] **Step 2: Write failed-result baseline test**
 
-[Fact]
-public async Task Successful_result_records_exact_from_and_to_sha() { }
-```
+Use a fake transport whose upload throws for the first upload and include one delete operation. Assert result contains failed upload + blocked delete, appended history has `Succeeded=false`, `FromHead="aaaaaaaa"`, `ToHead="cccccccc"`, and `DeploymentBaselineService` still resolves the older successful `aaaaaaaa` entry.
 
-Also pin review-focus case: rename upload failure leaves delete blocked and overall result false, therefore no successful baseline advances.
+- [ ] **Step 3: Write successful-result baseline test**
 
-- [ ] **Step 2: Run focused tests and verify failure**
+Use a successful fake transport. Assert appended history has `Succeeded=true`, repository/branch/profile context, exact `aaaaaaaa → cccccccc`, non-null `FinishedAt`; then assert `DeploymentBaselineService` resolves `cccccccc`.
+
+- [ ] **Step 4: Run focused Core tests and confirm failure**
 
 ```powershell
 dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj -c Debug --filter DeploymentRunCoordinatorTests
 ```
 
-- [ ] **Step 3: Implement coordinator**
+- [ ] **Step 5: Implement coordinator**
 
-Before real execution, require `plan.Context != null`, load current repository context and compare `HeadSha` to `plan.Context.ToHead`. Append history for both success/failure, but only entries with `Succeeded=true` are considered by `DeploymentBaselineService`.
-
-- [ ] **Step 4: Run Core tests**
-
-```powershell
-dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj -c Debug
-```
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/RaayaGitDeploy.Core/Deployment tests/RaayaGitDeploy.Core.Tests/Deployment
-git commit -m "feat(deploy): pin dry run and history to target head"
-```
-
----
-
-### Task 7: Add initial baseline onboarding for existing hosts
-
-**Files:**
-- Create: `src/RaayaGitDeploy.Core/Deployment/DeploymentBaselineRegistration.cs`
-- Modify: `src/RaayaGitDeploy.Core/Deployment/DeploymentBaselineService.cs`
-- Create: `tests/RaayaGitDeploy.Core.Tests/Deployment/DeploymentBaselineRegistrationTests.cs`
-- Modify: `src/RaayaGitDeploy.Presentation/Deployment/DeploymentWorkspaceViewModel.cs`
-- Extend Presentation tests for baseline-required state.
-
-**Interfaces:**
-
-```csharp
-public sealed record DeploymentBaselineRegistration(
-    string RepositoryPath,
-    string Branch,
-    string Head,
-    string ServerProfileId,
-    string ServerDisplayName);
-```
-
-- [ ] **Step 1: Test explicit registration and no-guess behavior**
-
-Registration writes an auditable history entry with `FromHead == ToHead == selected baseline SHA`, empty item results, and success=true. No registration occurs automatically when history is missing.
-
-- [ ] **Step 2: Run Core/Presentation focused tests and verify failure**
-
-```powershell
-dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj -c Debug --filter DeploymentBaselineRegistrationTests
-dotnet test tests/RaayaGitDeploy.Presentation.Tests/RaayaGitDeploy.Presentation.Tests.csproj -c Debug --filter DeploymentWorkspace
-```
-
-- [ ] **Step 3: Implement baseline-required ViewModel state**
-
-Expose clear state such as:
-
-```csharp
-public bool RequiresDeploymentBaseline { get; private set; }
-public string? BaselineMessage { get; private set; }
-```
-
-The first supported action is `Mark current HEAD as deployed baseline`; choosing an arbitrary historical commit can be added in the next Desktop UI slice after the core registration contract exists.
-
-- [ ] **Step 4: Run Core + Presentation tests**
-
-```powershell
-dotnet test tests/RaayaGitDeploy.Core.Tests/RaayaGitDeploy.Core.Tests.csproj -c Debug
-dotnet test tests/RaayaGitDeploy.Presentation.Tests/RaayaGitDeploy.Presentation.Tests.csproj -c Debug
-```
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/RaayaGitDeploy.Core/Deployment src/RaayaGitDeploy.Presentation/Deployment tests/RaayaGitDeploy.Core.Tests tests/RaayaGitDeploy.Presentation.Tests
-git commit -m "feat(deploy): add explicit deployed baseline onboarding"
-```
-
----
-
-### Task 8: Re-center Desktop workspace on Update → Pending → Dry Run → Deploy
-
-**Files:**
-- Modify: `src/RaayaGitDeploy.Presentation/Deployment/DeploymentWorkspaceViewModel.cs`
-- Modify: `src/RaayaGitDeploy.Presentation/Deployment/DeploymentQueueViewModel.cs`
-- Modify: `src/RaayaGitDeploy.Presentation/Deployment/DeploymentDryRunViewModel.cs`
-- Modify: `src/RaayaGitDeploy.App/Views/RepositoryWorkspacePage.xaml`
-- Create: `src/RaayaGitDeploy.App/Views/RepositoryWorkspacePage.DeploymentFlow.cs`
-- Modify composition files under `src/RaayaGitDeploy.App/Bootstrap/` that currently construct Git/deployment services.
-- Extend: `tests/RaayaGitDeploy.Presentation.Tests/` with workflow-state tests.
-
-**Interfaces:**
-- Consumes Tasks 3–7.
-- Produces a primary user flow that does not require file-by-file filesystem lookup.
-
-- [ ] **Step 1: Add ViewModel state-transition tests**
-
-Pin these transitions:
+Execution rules:
 
 ```text
-repo/profile selected + baseline A + HEAD C → Pending 2+ commits/files visible
-Update succeeds B→C → pending recomputed from A→C
-Prepare Deployment → queue auto-populated
-Dry Run ready → Deploy enabled
-HEAD changes after Dry Run → Deploy disabled / preview stale
-successful Deploy → baseline C and pending count 0
+reject plan.IsDryRun == true for mutation
+require non-null plan.Context
+load current Git context
+require current HeadSha == plan.Context.ToHead
+execute through existing DeploymentExecutor
+append history for success or failure with exact reviewed Git context
+return DeploymentResult
 ```
 
-- [ ] **Step 2: Run Presentation tests and verify failure**
+Do not update a separate mutable “last deployed SHA” file in Phase 1; successful history is the auditable source used by `DeploymentBaselineService`.
 
-```powershell
-dotnet test tests/RaayaGitDeploy.Presentation.Tests/RaayaGitDeploy.Presentation.Tests.csproj -c Debug
-```
-
-- [ ] **Step 3: Implement dominant workflow state in `DeploymentWorkspaceViewModel`**
-
-Expose fields needed by XAML:
-
-```csharp
-public string? LastDeployedHead { get; private set; }
-public string? CurrentHead { get; private set; }
-public int PendingCommitCount { get; private set; }
-public int PendingFileCount { get; private set; }
-public bool CanUpdateRepository { get; private set; }
-public bool CanPrepareDeployment { get; private set; }
-public bool CanDeployReviewedPlan { get; private set; }
-```
-
-Keep Terminal, Commands, Servers, Changes and History available as secondary workspaces.
-
-- [ ] **Step 4: Change the WinUI primary surface**
-
-At the top of `RepositoryWorkspacePage.xaml`, add a compact deployment summary card with repository/branch, selected profile, current SHA, last deployed SHA and pending counts. Primary actions are `Update / Pull`, `Review Pending`, `Dry Run`, and `Deploy`.
-
-Do not delete existing advanced views. Use the existing component/partial-class pattern and the new `RepositoryWorkspacePage.DeploymentFlow.cs` for event handlers so `RepositoryWorkspacePage.xaml.cs` does not grow further.
-
-- [ ] **Step 5: Run Presentation tests + full build**
-
-```powershell
-dotnet test tests/RaayaGitDeploy.Presentation.Tests/RaayaGitDeploy.Presentation.Tests.csproj -c Debug
-dotnet build RaayaGitDeploy.slnx -c Debug
-```
-
-Expected: PASS on a Windows/.NET environment capable of building WinUI.
-
-- [ ] **Step 6: Manual Windows acceptance**
-
-Run:
-
-```powershell
-dotnet run --project src/RaayaGitDeploy.App/RaayaGitDeploy.App.csproj -c Debug --no-build
-```
-
-Verify with a disposable Git repository/host profile: no clipped primary action labels, pending counts update after Pull, queue appears without manually browsing each changed file, split/master-detail views remain resizable, destructive delete candidates are visually distinct, and stale preview disables Deploy.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add src/RaayaGitDeploy.Presentation/Deployment src/RaayaGitDeploy.App/Views src/RaayaGitDeploy.App/Bootstrap tests/RaayaGitDeploy.Presentation.Tests
-git commit -m "feat(desktop): center workspace on update and deploy"
-```
-
----
-
-### Task 9: Replace Mobile arbitrary-path deployment with agent-issued pending plans
-
-**Files:**
-- Modify: `src/RaayaGitDeploy.Core/Companion/CompanionContracts.cs`
-- Modify: `src/RaayaGitDeploy.Android.Core/Api/CompanionDeploymentHttpClient.cs`
-- Modify: `src/RaayaGitDeploy.Android.Core/Deployment/CompanionDeploymentWorkflow.cs`
-- Extend: `tests/RaayaGitDeploy.Android.Core.Tests/` companion API/workflow tests.
-
-**Interfaces:**
-
-Add safe metadata contracts:
-
-```csharp
-public sealed record CompanionPendingItem(string Id, string Path, string Kind, bool Destructive);
-
-public sealed record CompanionPendingPlan(
-    string Id,
-    string RepositoryId,
-    string ProfileId,
-    string? FromHead,
-    string ToHead,
-    IReadOnlyList<GitCommitInfo> Commits,
-    IReadOnlyList<CompanionPendingItem> Items,
-    DateTimeOffset CreatedAt);
-
-public sealed record CompanionDryRunRequest(
-    string PendingPlanId,
-    IReadOnlyList<string> SelectedItemIds);
-```
-
-Add API operation:
-
-```csharp
-Task<CompanionPendingPlan> GetPendingPlanAsync(
-    string repositoryId,
-    string profileId,
-    CancellationToken cancellationToken);
-```
-
-Evolve Dry Run to consume `CompanionDryRunRequest`; do not accept raw filesystem paths from Mobile.
-
-- [ ] **Step 1: Write security-boundary tests**
-
-Tests must prove:
-
-```text
-pending plan repository/profile must match selected scope
-selected item IDs must exist in the authorized plan
-empty selection is rejected
-client cannot submit a raw /public_html or local filesystem path
-preview returned for another repo/profile is rejected
-```
-
-- [ ] **Step 2: Run Android Core tests and verify failure**
-
-```powershell
-dotnet test tests/RaayaGitDeploy.Android.Core.Tests/RaayaGitDeploy.Android.Core.Tests.csproj -c Debug
-```
-
-- [ ] **Step 3: Implement plan-based workflow**
-
-Add `PendingPlan` state to `CompanionDeploymentWorkflow`. Selection becomes item-ID based. Keep existing HTTPS/token/scope validation and offline/rate-limit activity states unchanged.
-
-- [ ] **Step 4: Update HTTP client endpoints**
-
-Use agent-controlled routes shaped like:
-
-```text
-GET  /api/companion/repositories/{repositoryId}/profiles/{profileId}/pending-plan
-POST /api/companion/deployment-previews
-POST /api/companion/deployments
-```
-
-Payload for preview contains plan ID + selected item IDs only. No SSH key, FTP password, Git credential or arbitrary remote path field is added.
-
-- [ ] **Step 5: Run Android Core tests**
-
-```powershell
-dotnet test tests/RaayaGitDeploy.Android.Core.Tests/RaayaGitDeploy.Android.Core.Tests.csproj -c Debug
-```
-
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add src/RaayaGitDeploy.Core/Companion src/RaayaGitDeploy.Android.Core tests/RaayaGitDeploy.Android.Core.Tests
-git commit -m "feat(mobile): deploy from agent-issued pending plans"
-```
-
----
-
-### Task 10: Full regression verification and roadmap/checkpoint alignment
-
-**Files:**
-- Modify: `docs/IMPLEMENTATION_SEQUENCE.md`
-- Modify: `docs/ROADMAP.md` only if implemented status differs from current Active Development text.
-- Update the current status/checkpoint document under `docs/superpowers/plans/` rather than rewriting the historical design spec.
-
-**Interfaces:** None; verification and documentation only after product code is green.
-
-- [ ] **Step 1: Run the complete test/build matrix**
+- [ ] **Step 6: Run full Phase 1 matrix**
 
 ```powershell
 dotnet restore RaayaGitDeploy.slnx
@@ -796,52 +672,41 @@ dotnet test tests/RaayaGitDeploy.Presentation.Tests/RaayaGitDeploy.Presentation.
 dotnet test tests/RaayaGitDeploy.Android.Core.Tests/RaayaGitDeploy.Android.Core.Tests.csproj -c Debug --no-build
 ```
 
-Only label these `TESTED-PASS` if each command actually exits successfully.
+Only mark commands `TESTED-PASS` if they actually exit successfully.
 
-- [ ] **Step 2: Execute acceptance scenarios**
-
-Desktop disposable-repo cases:
-
-```text
-A deployed → Pull to B → Pull to C → pending must be A..C
-A deployed → Dry Run C → deployment failure → baseline stays A
-A deployed → Dry Run C → full success → baseline becomes C
-Dry Run C → local HEAD changes D → old preview cannot Deploy as current
-rename + failed upload → delete blocked → baseline unchanged
-```
-
-Mobile contract cases:
-
-```text
-authorized pending plan → item selection → Dry Run → confirmed deployment
-invented item ID/path → rejected
-repo/profile mismatch → rejected
-```
-
-- [ ] **Step 3: Update implementation sequence**
-
-Document the implemented order as Git baseline/history → safe Pull → pending range → auto queue → target-aware Dry Run → Desktop flow → companion plan contract. Keep Android platform host/Keystore explicitly identified as the next independent platform plan.
-
-- [ ] **Step 4: Commit docs**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add docs/IMPLEMENTATION_SEQUENCE.md docs/ROADMAP.md docs/superpowers/plans
-git commit -m "docs: checkpoint git-to-host deployment workflow"
+git add src/RaayaGitDeploy.Core/Deployment tests/RaayaGitDeploy.Core.Tests/Deployment
+git commit -m "feat(deploy): pin reviewed plan to deployed git baseline"
 ```
 
 ---
 
-## Follow-up Plan Boundary: Android Application Host + Keystore
+## Phase 1 Acceptance
 
-The approved spec also requires a real Android application/platform host and Android Keystore-backed implementation of the existing token-protection boundary. That work is intentionally **not mixed into this plan** because it introduces an Android target/workload, application lifecycle, manifest/package configuration and device-specific secure-storage tests independent of the Git-to-Host domain workflow above.
+The phase is complete only when these scenarios are covered by tests and the complete solution remains green:
 
-After Task 9 is green, create a separate spec-derived implementation plan for:
+```text
+Production baseline A
+Pull/update to B
+Pull/update to C without deploy
+→ pending range is A..C
+→ commits/files come from exact committed range
+→ queue is generated automatically
+→ generated rule output such as public/build joins queue when present
+→ Dry Run is pinned to target C
+→ failed upload blocks deletes and leaves baseline A
+→ successful full deployment records A→C
+→ next pending range at HEAD C is empty
+→ HEAD D after reviewing C makes the C preview stale
+```
 
-- Android application project/host,
-- DI/composition of `RaayaGitDeploy.Android.Core`,
-- `IPlatformAccessTokenProtector` backed by Android Keystore,
-- protected persistence and session lifecycle,
-- repository/profile/pending-plan UI,
-- device/emulator acceptance tests.
+## Subsequent Plans from the Same Approved Spec
 
-The platform host must consume the plan-based companion contract from Task 9 and must not reintroduce raw deployment credentials or arbitrary path deployment.
+After Phase 1 is green, write and execute these as separate plans so each remains reviewable:
+
+1. **Desktop Workflow Plan** — wire `IGitUpdateService`, `PendingDeploymentService`, generated rules, queue, Dry Run and coordinator into `DeploymentWorkspaceViewModel` and `RepositoryWorkspacePage`; add explicit initial-baseline onboarding; make **Update → Review Pending → Dry Run → Deploy** the dominant UX; finish concrete FTP/FTPS/SFTP composition and secure credential resolver; preserve responsive navigation/split panes and existing IDE-style Commit/Terminal work.
+2. **Companion/Mobile Plan** — replace arbitrary path submission with agent-issued pending plan IDs + item IDs; expose pending commits/files, Dry Run, confirmation, progress/result/history; keep all host credentials server-side.
+3. **Android Host Plan** — create the actual Android application/platform host, compose `RaayaGitDeploy.Android.Core`, implement existing token-protection boundary with Android Keystore, and run emulator/device acceptance.
+4. **Auto Deploy Integration Plan** — compare `feat/git-host-auto-deploy` against the now-stable pending-range/plan/history contracts and reconcile explicitly without blind merge or policy leakage.
