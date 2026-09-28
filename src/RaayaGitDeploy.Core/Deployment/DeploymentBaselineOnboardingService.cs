@@ -26,7 +26,7 @@ public sealed class DeploymentBaselineOnboardingService(
             profile.DisplayName,
             true,
             [],
-            context.RepositoryPath,
+            context.RootPath,
             context.BranchName,
             null,
             context.HeadSha,
