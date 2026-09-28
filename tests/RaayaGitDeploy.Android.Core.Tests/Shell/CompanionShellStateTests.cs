@@ -44,12 +44,14 @@ public sealed class CompanionShellStateTests
         Assert.Equal(CompanionShellScreen.HistoryDetail, shell.Screen);
         Assert.Equal("deploy-1", workflow.SelectedHistoryRun?.Id);
         Assert.Equal("deploy-1", api.LastDeploymentDetailId);
+        Assert.False(shell.IsBusy);
+        Assert.Null(shell.LastError);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             shell.OpenHistoryDetailAsync("foreign-deploy", CancellationToken.None));
     }
 
     [Fact]
-    public async Task Shell_RemainsOnHistoryWhenAuthorizedDetailLoadFails()
+    public async Task Shell_RemainsOnHistoryAndExposesRetryableErrorWhenAuthorizedDetailLoadFails()
     {
         var api = new FakeApi { FailDeploymentDetail = true };
         var workflow = new CompanionDeploymentWorkflow(api);
@@ -66,6 +68,8 @@ public sealed class CompanionShellStateTests
         Assert.Equal(CompanionShellScreen.History, shell.Screen);
         Assert.Null(workflow.SelectedHistoryRun);
         Assert.Equal("deploy-1", api.LastDeploymentDetailId);
+        Assert.False(shell.IsBusy);
+        Assert.Equal("Agent unavailable.", shell.LastError);
     }
 
     private sealed class FakeApi : ICompanionDeploymentApi
