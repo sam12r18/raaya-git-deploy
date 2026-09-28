@@ -10,7 +10,15 @@ public sealed class DeploymentBaselineOnboardingServiceTests
     {
         var history = new MemoryHistoryStore();
         var git = new FakeGitRepositoryService(new GitRepositoryContext(@"C:\work\app", "main", "cccccccc"));
-        var profile = new ServerProfile("prod", "Production", "example.com", 22, "deploy", "/var/www/app", ServerAuthenticationMode.Password, null);
+        var profile = new ServerProfile(
+            "prod",
+            "Production",
+            "example.com",
+            22,
+            "deploy",
+            "/var/www/app",
+            ServerAuthenticationMode.ExternalCredentialReference,
+            "cred:prod");
         var service = new DeploymentBaselineOnboardingService(git, history);
 
         var entry = await service.MarkCurrentHeadAsync(@"C:\work\app", profile, CancellationToken.None);
