@@ -1,3 +1,4 @@
+using RaayaGitDeploy.Android.Core.Api;
 using RaayaGitDeploy.Android.Core.Deployment;
 
 namespace RaayaGitDeploy.Android.Core.Shell;
@@ -16,6 +17,7 @@ public sealed class CompanionShellState
     public CompanionShellScreen Screen { get; private set; } = CompanionShellScreen.Repositories;
     public bool IsBusy { get; private set; }
     public string? LastError { get; private set; }
+    public TimeSpan? RetryAfter { get; private set; }
     public bool CanRetry => !IsBusy && LastError is not null;
     public bool CanOpenProfiles => _workflow.SelectedRepository is not null;
     public bool CanOpenHistory => _workflow.SelectedRepository is not null;
@@ -43,7 +45,7 @@ public sealed class CompanionShellState
             throw new InvalidOperationException("Select a deployment from the loaded repository history.");
 
         var previousScreen = Screen;
-        LastError = null;
+        ClearError();
         IsBusy = true;
         try
         {
@@ -53,6 +55,13 @@ public sealed class CompanionShellState
         catch (OperationCanceledException)
         {
             Screen = previousScreen;
+            throw;
+        }
+        catch (CompanionRateLimitedException exception)
+        {
+            Screen = previousScreen;
+            LastError = exception.Message;
+            RetryAfter = exception.RetryAfter;
             throw;
         }
         catch (Exception exception)
@@ -67,7 +76,11 @@ public sealed class CompanionShellState
         }
     }
 
-    public void ClearError() => LastError = null;
+    public void ClearError()
+    {
+        LastError = null;
+        RetryAfter = null;
+    }
 
     public void OpenDeployment()
     {
