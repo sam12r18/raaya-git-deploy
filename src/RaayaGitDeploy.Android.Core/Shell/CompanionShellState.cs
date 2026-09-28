@@ -1,5 +1,6 @@
 using RaayaGitDeploy.Android.Core.Api;
 using RaayaGitDeploy.Android.Core.Deployment;
+using RaayaGitDeploy.Core.Companion;
 
 namespace RaayaGitDeploy.Android.Core.Shell;
 
@@ -26,8 +27,9 @@ public sealed class CompanionShellState
     public string? DeploymentActivityMessage => _workflow.ActivityMessage;
     public string? CurrentDeploymentState => _workflow.CurrentRun?.State;
     public bool IsDeploymentTerminal => _workflow.IsCurrentRunTerminal;
-    public bool CanRefreshDeployment => _workflow.CurrentRun is not null && !_workflow.IsCurrentRunTerminal;
+    public bool CanRefreshDeployment => !IsBusy && _workflow.CurrentRun is not null && !_workflow.IsCurrentRunTerminal;
     public bool CanStartDeployment =>
+        !IsBusy &&
         CanOpenDeployment &&
         _workflow.Preview is not null &&
         _workflow.ActivityState == CompanionDeploymentActivityState.Ready;
@@ -54,36 +56,21 @@ public sealed class CompanionShellState
             throw new InvalidOperationException("Select a deployment from the loaded repository history.");
 
         var previousScreen = Screen;
-        ClearError();
-        IsBusy = true;
-        try
-        {
-            await _workflow.LoadHistoryDetailAsync(deploymentId, cancellationToken);
-            Screen = CompanionShellScreen.HistoryDetail;
-        }
-        catch (OperationCanceledException)
-        {
-            Screen = previousScreen;
-            throw;
-        }
-        catch (CompanionRateLimitedException exception)
-        {
-            Screen = previousScreen;
-            LastError = exception.Message;
-            RetryAfter = exception.RetryAfter;
-            throw;
-        }
-        catch (Exception exception)
-        {
-            Screen = previousScreen;
-            LastError = exception.Message;
-            throw;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        await RunBusyAsync(
+            () => _workflow.LoadHistoryDetailAsync(deploymentId, cancellationToken),
+            cancellationToken,
+            onSuccess: () => Screen = CompanionShellScreen.HistoryDetail,
+            onFailure: () => Screen = previousScreen);
     }
+
+    public Task<CompanionDeploymentPreview> DryRunAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken) =>
+        RunBusyAsync(() => _workflow.DryRunAsync(paths, cancellationToken), cancellationToken);
+
+    public Task<CompanionDeploymentRun> StartDeploymentAsync(bool confirmed, CancellationToken cancellationToken) =>
+        RunBusyAsync(() => _workflow.StartDeploymentAsync(confirmed, cancellationToken), cancellationToken);
+
+    public Task<CompanionDeploymentRun> RefreshDeploymentAsync(CancellationToken cancellationToken) =>
+        RunBusyAsync(() => _workflow.RefreshDeploymentAsync(cancellationToken), cancellationToken);
 
     public void ClearError()
     {
@@ -96,6 +83,46 @@ public sealed class CompanionShellState
         if (!CanOpenDeployment)
             throw new InvalidOperationException("Select an authorized repository and deployment profile first.");
         Screen = CompanionShellScreen.Deployment;
+    }
+
+    private async Task RunBusyAsync(Func<Task> operation, CancellationToken cancellationToken, Action? onSuccess = null, Action? onFailure = null)
+    {
+        await RunBusyAsync(async () => { await operation().ConfigureAwait(false); return true; }, cancellationToken, onSuccess, onFailure).ConfigureAwait(false);
+    }
+
+    private async Task<T> RunBusyAsync<T>(Func<Task<T>> operation, CancellationToken cancellationToken, Action? onSuccess = null, Action? onFailure = null)
+    {
+        if (IsBusy) throw new InvalidOperationException("Another companion operation is already in progress.");
+        ClearError();
+        IsBusy = true;
+        try
+        {
+            var result = await operation().ConfigureAwait(false);
+            onSuccess?.Invoke();
+            return result;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            onFailure?.Invoke();
+            throw;
+        }
+        catch (CompanionRateLimitedException exception)
+        {
+            onFailure?.Invoke();
+            LastError = exception.Message;
+            RetryAfter = exception.RetryAfter;
+            throw;
+        }
+        catch (Exception exception)
+        {
+            onFailure?.Invoke();
+            LastError = exception.Message;
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 }
 
