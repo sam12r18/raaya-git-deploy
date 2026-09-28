@@ -28,6 +28,22 @@ public sealed class CompanionShellStateTests
     }
 
     [Fact]
+    public async Task Shell_ExposesDeploymentWorkflowActivityForPresentation()
+    {
+        var workflow = new CompanionDeploymentWorkflow(new FakeApi());
+        var shell = new CompanionShellState(workflow);
+        await workflow.LoadRepositoriesAsync(CancellationToken.None);
+        await workflow.SelectRepositoryAsync("repo-1", CancellationToken.None);
+        workflow.SelectProfile("prod");
+
+        await workflow.DryRunAsync(["src/app.cs"], CancellationToken.None);
+
+        Assert.Equal(CompanionDeploymentActivityState.Ready, shell.DeploymentActivityState);
+        Assert.Equal("Dry Run ready for review.", shell.DeploymentActivityMessage);
+        Assert.True(shell.CanStartDeployment);
+    }
+
+    [Fact]
     public async Task Shell_LoadsAuthorizedHistoryDetailBeforeOpeningDetailScreen()
     {
         var api = new FakeApi();
@@ -116,7 +132,9 @@ public sealed class CompanionShellStateTests
                 new("deploy-1", repositoryId, "prod", "succeeded", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null)
             ]);
 
-        public Task<CompanionDeploymentPreview> DryRunAsync(CompanionDeploymentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<CompanionDeploymentPreview> DryRunAsync(CompanionDeploymentRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new CompanionDeploymentPreview("preview-1", request.RepositoryId, request.ProfileId, request.Paths, [], true));
+
         public Task<CompanionDeploymentRun> StartDeploymentAsync(string previewId, bool confirmed, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<CompanionDeploymentRun> GetDeploymentAsync(string deploymentId, CancellationToken cancellationToken)
