@@ -133,7 +133,12 @@ public sealed class CompanionShellStateTests
             ]);
 
         public Task<CompanionDeploymentPreview> DryRunAsync(CompanionDeploymentRequest request, CancellationToken cancellationToken) =>
-            Task.FromResult(new CompanionDeploymentPreview("preview-1", request.RepositoryId, request.ProfileId, request.Paths, [], true));
+            Task.FromResult(new CompanionDeploymentPreview(
+                "preview-1",
+                request.RepositoryId,
+                request.ProfileId,
+                request.Paths.Select(path => new CompanionDeploymentOperation(path, "/remote/" + path, "upload")).ToArray(),
+                DateTimeOffset.UtcNow));
 
         public Task<CompanionDeploymentRun> StartDeploymentAsync(string previewId, bool confirmed, CancellationToken cancellationToken) => throw new NotSupportedException();
 
