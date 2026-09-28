@@ -34,6 +34,9 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
 
     public string? AbbreviatedHeadSha => string.IsNullOrEmpty(HeadSha) ? null : HeadSha[..Math.Min(8, HeadSha.Length)];
     public bool CanCompareFromSelectedCommit => SelectedCommit is not null && !IsBusy;
+    public IReadOnlyList<string> DeploymentQueuePaths => Changes.Where(static item => item.IsSelectedForDeployment).Select(static item => item.Path).ToArray();
+    public int DeploymentQueueCount => DeploymentQueuePaths.Count;
+    public bool HasDeploymentQueueItems => DeploymentQueueCount > 0;
 
     partial void OnSelectedCommitChanged(GitCommitInfo? value) => OnPropertyChanged(nameof(CanCompareFromSelectedCommit));
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanCompareFromSelectedCommit));
@@ -85,6 +88,20 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         var commit = SelectedCommit ?? throw new InvalidOperationException("Select a commit before comparing pending changes.");
         SelectedSection = WorkspaceSection.Changes;
         return CompareSinceAsync(commit.Sha, cancellationToken);
+    }
+
+    public void SelectAllPendingForDeployment()
+    {
+        foreach (var item in Changes)
+            item.IsSelectedForDeployment = true;
+        NotifyDeploymentQueueChanged();
+    }
+
+    public void ClearDeploymentSelection()
+    {
+        foreach (var item in Changes)
+            item.IsSelectedForDeployment = false;
+        NotifyDeploymentQueueChanged();
     }
 
     public async Task SelectCommitFileAsync(GitChange file, CancellationToken cancellationToken = default)
@@ -159,10 +176,23 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         foreach (var item in _reviewSession.Items)
         {
             var flags = flagsProvider?.Invoke(item) ?? default;
-            Changes.Add(new ChangeItemViewModel(_reviewSession, item, flags.IsStaged, flags.IsUnstaged));
+            var viewModel = new ChangeItemViewModel(_reviewSession, item, flags.IsStaged, flags.IsUnstaged);
+            viewModel.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(ChangeItemViewModel.IsSelectedForDeployment)) NotifyDeploymentQueueChanged();
+            };
+            Changes.Add(viewModel);
         }
+        NotifyDeploymentQueueChanged();
     }
 
-    private void ClearChanges() { _reviewSession = null; Changes.Clear(); }
+    private void NotifyDeploymentQueueChanged()
+    {
+        OnPropertyChanged(nameof(DeploymentQueuePaths));
+        OnPropertyChanged(nameof(DeploymentQueueCount));
+        OnPropertyChanged(nameof(HasDeploymentQueueItems));
+    }
+
+    private void ClearChanges() { _reviewSession = null; Changes.Clear(); NotifyDeploymentQueueChanged(); }
     private string GetRequiredRepositoryPath() => !string.IsNullOrWhiteSpace(RepositoryPath) ? RepositoryPath : throw new InvalidOperationException("Open a Git repository before running this operation.");
 }
