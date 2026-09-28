@@ -14,6 +14,8 @@ public sealed class CompanionShellState
         _workflow = workflow ?? throw new ArgumentNullException(nameof(workflow));
 
     public CompanionShellScreen Screen { get; private set; } = CompanionShellScreen.Repositories;
+    public bool IsBusy { get; private set; }
+    public string? LastError { get; private set; }
     public bool CanOpenProfiles => _workflow.SelectedRepository is not null;
     public bool CanOpenHistory => _workflow.SelectedRepository is not null;
     public bool CanOpenDeployment => _workflow.SelectedRepository is not null && _workflow.SelectedProfile is not null;
@@ -40,15 +42,22 @@ public sealed class CompanionShellState
             throw new InvalidOperationException("Select a deployment from the loaded repository history.");
 
         var previousScreen = Screen;
+        LastError = null;
+        IsBusy = true;
         try
         {
             await _workflow.LoadHistoryDetailAsync(deploymentId, cancellationToken);
             Screen = CompanionShellScreen.HistoryDetail;
         }
-        catch
+        catch (Exception exception)
         {
             Screen = previousScreen;
+            LastError = exception.Message;
             throw;
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 
