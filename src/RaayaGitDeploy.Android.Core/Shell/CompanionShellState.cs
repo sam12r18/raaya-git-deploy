@@ -16,6 +16,7 @@ public sealed class CompanionShellState
     public CompanionShellScreen Screen { get; private set; } = CompanionShellScreen.Repositories;
     public bool IsBusy { get; private set; }
     public string? LastError { get; private set; }
+    public bool CanRetry => !IsBusy && LastError is not null;
     public bool CanOpenProfiles => _workflow.SelectedRepository is not null;
     public bool CanOpenHistory => _workflow.SelectedRepository is not null;
     public bool CanOpenDeployment => _workflow.SelectedRepository is not null && _workflow.SelectedProfile is not null;
@@ -49,6 +50,11 @@ public sealed class CompanionShellState
             await _workflow.LoadHistoryDetailAsync(deploymentId, cancellationToken);
             Screen = CompanionShellScreen.HistoryDetail;
         }
+        catch (OperationCanceledException)
+        {
+            Screen = previousScreen;
+            throw;
+        }
         catch (Exception exception)
         {
             Screen = previousScreen;
@@ -60,6 +66,8 @@ public sealed class CompanionShellState
             IsBusy = false;
         }
     }
+
+    public void ClearError() => LastError = null;
 
     public void OpenDeployment()
     {
