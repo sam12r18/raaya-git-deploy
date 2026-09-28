@@ -22,6 +22,12 @@ public sealed class CompanionShellState
     public bool CanOpenProfiles => _workflow.SelectedRepository is not null;
     public bool CanOpenHistory => _workflow.SelectedRepository is not null;
     public bool CanOpenDeployment => _workflow.SelectedRepository is not null && _workflow.SelectedProfile is not null;
+    public CompanionDeploymentActivityState DeploymentActivityState => _workflow.ActivityState;
+    public string? DeploymentActivityMessage => _workflow.ActivityMessage;
+    public bool CanStartDeployment =>
+        CanOpenDeployment &&
+        _workflow.Preview is not null &&
+        _workflow.ActivityState == CompanionDeploymentActivityState.Ready;
 
     public void OpenRepositories() => Screen = CompanionShellScreen.Repositories;
 
