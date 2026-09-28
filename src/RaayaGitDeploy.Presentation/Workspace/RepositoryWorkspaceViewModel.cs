@@ -33,6 +33,10 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
     public ObservableCollection<GitChange> CommitChanges { get; } = new();
 
     public string? AbbreviatedHeadSha => string.IsNullOrEmpty(HeadSha) ? null : HeadSha[..Math.Min(8, HeadSha.Length)];
+    public bool CanCompareFromSelectedCommit => SelectedCommit is not null && !IsBusy;
+
+    partial void OnSelectedCommitChanged(GitCommitInfo? value) => OnPropertyChanged(nameof(CanCompareFromSelectedCommit));
+    partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanCompareFromSelectedCommit));
 
     public void ClearError() => ErrorMessage = null;
     public void ReportError(Exception exception) { ArgumentNullException.ThrowIfNull(exception); ErrorMessage = exception.Message; }
@@ -50,9 +54,6 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         await ExecuteAsync(async () =>
         {
-            // Resolve the candidate repository completely before replacing the current workspace. A failed
-            // FolderPicker selection (not a Git repository, inaccessible path, etc.) must not destroy the
-            // repository/review state the user was already working with.
             var context = await _repositoryService.GetContextAsync(path, cancellationToken);
             var changes = await _repositoryService.GetWorkingTreeChangesAsync(context.RootPath, cancellationToken);
             var commits = await _repositoryService.GetRecentCommitsAsync(context.RootPath, RecentCommitLimit, cancellationToken);
@@ -77,6 +78,13 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
             var changes = await _repositoryService.GetCommitChangesAsync(path, commit.Sha, cancellationToken);
             foreach (var change in changes) CommitChanges.Add(change);
         }, cancellationToken);
+    }
+
+    public Task CompareFromSelectedCommitAsync(CancellationToken cancellationToken = default)
+    {
+        var commit = SelectedCommit ?? throw new InvalidOperationException("Select a commit before comparing pending changes.");
+        SelectedSection = WorkspaceSection.Changes;
+        return CompareSinceAsync(commit.Sha, cancellationToken);
     }
 
     public async Task SelectCommitFileAsync(GitChange file, CancellationToken cancellationToken = default)
