@@ -34,7 +34,7 @@ public sealed class DeploymentBaselineOnboardingServiceTests
         var history = new MemoryHistoryStore();
         var git = new FakeGitRepositoryService(
             new GitRepositoryContext(@"C:\work\app", "main", "cccccccc"),
-            [new GitCommitInfo("bbbbbbbb", "Previous deploy", "Dev", DateTimeOffset.UtcNow.AddHours(-1))]);
+            [Commit("bbbbbbbb")]);
         var service = new DeploymentBaselineOnboardingService(git, history);
 
         var entry = await service.MarkRecentCommitAsync(@"C:\work\app", CreateProfile(), "bbbbbbbb", CancellationToken.None);
@@ -50,7 +50,7 @@ public sealed class DeploymentBaselineOnboardingServiceTests
         var history = new MemoryHistoryStore();
         var git = new FakeGitRepositoryService(
             new GitRepositoryContext(@"C:\work\app", "main", "cccccccc"),
-            [new GitCommitInfo("bbbbbbbb", "Previous deploy", "Dev", DateTimeOffset.UtcNow.AddHours(-1))]);
+            [Commit("bbbbbbbb")]);
         var service = new DeploymentBaselineOnboardingService(git, history);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -59,6 +59,13 @@ public sealed class DeploymentBaselineOnboardingServiceTests
         Assert.Contains("reachable", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(history.Entries);
     }
+
+    private static GitCommitInfo Commit(string sha) => new(
+        sha,
+        sha[..Math.Min(7, sha.Length)],
+        "Previous deploy",
+        "Dev",
+        DateTimeOffset.UtcNow.AddHours(-1));
 
     private static ServerProfile CreateProfile() => new(
         "prod",
