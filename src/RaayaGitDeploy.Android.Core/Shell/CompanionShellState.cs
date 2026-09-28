@@ -24,6 +24,9 @@ public sealed class CompanionShellState
     public bool CanOpenDeployment => _workflow.SelectedRepository is not null && _workflow.SelectedProfile is not null;
     public CompanionDeploymentActivityState DeploymentActivityState => _workflow.ActivityState;
     public string? DeploymentActivityMessage => _workflow.ActivityMessage;
+    public string? CurrentDeploymentState => _workflow.CurrentRun?.State;
+    public bool IsDeploymentTerminal => _workflow.IsCurrentRunTerminal;
+    public bool CanRefreshDeployment => _workflow.CurrentRun is not null && !_workflow.IsCurrentRunTerminal;
     public bool CanStartDeployment =>
         CanOpenDeployment &&
         _workflow.Preview is not null &&
