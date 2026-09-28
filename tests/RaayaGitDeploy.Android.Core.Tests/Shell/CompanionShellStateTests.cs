@@ -45,6 +45,7 @@ public sealed class CompanionShellStateTests
         Assert.Equal("deploy-1", workflow.SelectedHistoryRun?.Id);
         Assert.Equal("deploy-1", api.LastDeploymentDetailId);
         Assert.False(shell.IsBusy);
+        Assert.False(shell.CanRetry);
         Assert.Null(shell.LastError);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             shell.OpenHistoryDetailAsync("foreign-deploy", CancellationToken.None));
@@ -69,13 +70,40 @@ public sealed class CompanionShellStateTests
         Assert.Null(workflow.SelectedHistoryRun);
         Assert.Equal("deploy-1", api.LastDeploymentDetailId);
         Assert.False(shell.IsBusy);
+        Assert.True(shell.CanRetry);
         Assert.Equal("Agent unavailable.", shell.LastError);
+
+        shell.ClearError();
+        Assert.False(shell.CanRetry);
+        Assert.Null(shell.LastError);
+    }
+
+    [Fact]
+    public async Task Shell_CancelledDetailLoadIsNotPresentedAsRetryableFailure()
+    {
+        var api = new FakeApi { CancelDeploymentDetail = true };
+        var workflow = new CompanionDeploymentWorkflow(api);
+        var shell = new CompanionShellState(workflow);
+
+        await workflow.LoadRepositoriesAsync(CancellationToken.None);
+        await workflow.SelectRepositoryAsync("repo-1", CancellationToken.None);
+        await workflow.LoadHistoryAsync(CancellationToken.None);
+        shell.OpenHistory();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            shell.OpenHistoryDetailAsync("deploy-1", CancellationToken.None));
+
+        Assert.Equal(CompanionShellScreen.History, shell.Screen);
+        Assert.False(shell.IsBusy);
+        Assert.False(shell.CanRetry);
+        Assert.Null(shell.LastError);
     }
 
     private sealed class FakeApi : ICompanionDeploymentApi
     {
         public string? LastDeploymentDetailId { get; private set; }
         public bool FailDeploymentDetail { get; init; }
+        public bool CancelDeploymentDetail { get; init; }
 
         public Task<IReadOnlyList<CompanionRepository>> GetRepositoriesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanionRepository>>([new("repo-1", "Repo", "main", "abc123", true)]);
@@ -94,6 +122,8 @@ public sealed class CompanionShellStateTests
         public Task<CompanionDeploymentRun> GetDeploymentAsync(string deploymentId, CancellationToken cancellationToken)
         {
             LastDeploymentDetailId = deploymentId;
+            if (CancelDeploymentDetail)
+                throw new OperationCanceledException(cancellationToken);
             if (FailDeploymentDetail)
                 throw new HttpRequestException("Agent unavailable.");
 
