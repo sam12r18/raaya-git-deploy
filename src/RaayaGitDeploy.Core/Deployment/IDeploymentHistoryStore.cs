@@ -1,5 +1,11 @@
 namespace RaayaGitDeploy.Core.Deployment;
 
+public enum DeploymentHistoryEventKind
+{
+    Deployment = 0,
+    BaselineMarked = 1
+}
+
 public sealed record DeploymentHistoryEntry(
     string Id,
     DateTimeOffset StartedAt,
@@ -11,7 +17,8 @@ public sealed record DeploymentHistoryEntry(
     string? Branch = null,
     string? FromHead = null,
     string? ToHead = null,
-    DateTimeOffset? FinishedAt = null);
+    DateTimeOffset? FinishedAt = null,
+    DeploymentHistoryEventKind EventKind = DeploymentHistoryEventKind.Deployment);
 
 public interface IDeploymentHistoryStore
 {
