@@ -24,13 +24,16 @@ public sealed class CompanionShellState
     public bool CanOpenDeployment => _workflow.SelectedRepository is not null && _workflow.SelectedProfile is not null;
     public CompanionDeploymentActivityState DeploymentActivityState => _workflow.ActivityState;
     public string? DeploymentActivityMessage => _workflow.ActivityMessage;
+    public string? CurrentDeploymentId => _workflow.CurrentRun?.Id;
     public string? CurrentDeploymentState => _workflow.CurrentRun?.State;
     public string? CurrentDeploymentFailureMessage => _workflow.CurrentRun?.FailureMessage;
     public DateTimeOffset? CurrentDeploymentStartedAt => _workflow.CurrentRun?.StartedAt;
     public DateTimeOffset? CurrentDeploymentFinishedAt => _workflow.CurrentRun?.FinishedAt;
     public bool HasDeploymentFailure => !string.IsNullOrWhiteSpace(_workflow.CurrentRun?.FailureMessage);
+    public bool HasDeploymentResult => _workflow.CurrentRun is not null;
+    public bool IsDeploymentRunning => _workflow.CurrentRun is not null && !_workflow.IsCurrentRunTerminal;
     public bool IsDeploymentTerminal => _workflow.IsCurrentRunTerminal;
-    public bool CanRefreshDeployment => !IsBusy && _workflow.CurrentRun is not null && !_workflow.IsCurrentRunTerminal;
+    public bool CanRefreshDeployment => !IsBusy && IsDeploymentRunning;
     public bool CanStartDeployment => !IsBusy && CanOpenDeployment && _workflow.Preview is not null && _workflow.ActivityState == CompanionDeploymentActivityState.Ready;
 
     public void OpenRepositories() => Screen = CompanionShellScreen.Repositories;
