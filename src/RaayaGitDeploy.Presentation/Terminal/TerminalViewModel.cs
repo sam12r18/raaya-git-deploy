@@ -91,6 +91,8 @@ public sealed class TerminalViewModel : IAsyncDisposable
         }
     }
 
+    public void ClearOutput() => ResetOutput();
+
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         if (_session?.State == TerminalSessionState.Running)
