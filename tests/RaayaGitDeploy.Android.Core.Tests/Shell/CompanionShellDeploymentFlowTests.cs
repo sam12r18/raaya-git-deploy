@@ -110,7 +110,7 @@ public sealed class CompanionShellDeploymentFlowTests
             Assert.Equal("deploy-1", deploymentId);
             RefreshCount++;
             var state = _refreshStates.Count > 0 ? _refreshStates.Dequeue() : "succeeded";
-            var completedAt = string.Equals(state, "succeeded", StringComparison.OrdinalIgnoreCase) ? DateTimeOffset.UtcNow : null;
+            DateTimeOffset? completedAt = string.Equals(state, "succeeded", StringComparison.OrdinalIgnoreCase) ? DateTimeOffset.UtcNow : null;
             return Task.FromResult(new CompanionDeploymentRun(
                 deploymentId, "repo-1", "prod", state, DateTimeOffset.UtcNow, completedAt, null));
         }
