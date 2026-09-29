@@ -95,7 +95,7 @@ public sealed class CompanionShellState
             await operation().ConfigureAwait(false);
             onSuccess?.Invoke();
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             onFailure?.Invoke();
             throw;
@@ -130,7 +130,7 @@ public sealed class CompanionShellState
             onSuccess?.Invoke();
             return result;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             onFailure?.Invoke();
             throw;
