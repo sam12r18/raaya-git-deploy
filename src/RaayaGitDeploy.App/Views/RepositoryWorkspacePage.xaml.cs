@@ -82,8 +82,8 @@ public sealed partial class RepositoryWorkspacePage : Page
         {
             if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository first.");
             if (_deployment.PreviewPlan is null) throw new InvalidOperationException("Run Dry Run before deployment.");
-            var profile = _deployment.Servers.SelectedProfile ?? throw new InvalidOperationException("Select a server profile before deployment.");
-            var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Confirm deployment", Content = $"Deploy {_deployment.PreviewPlan.Operations.Count} planned operation(s) to {profile.DisplayName}? Review the Dry Run mapping before continuing.", PrimaryButtonText = "Deploy", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+            var review = _deployment.PreviewReview ?? throw new InvalidOperationException("Dry Run review is missing or stale. Run Dry Run again before deployment.");
+            var dialog = DeploymentConfirmationDialogFactory.Create(XamlRoot, review);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
             DeployResultText.Text = "Deployment in progress...";
             var result = await _deployment.ExecuteAsync(ViewModel.RepositoryPath, CancellationToken.None);
