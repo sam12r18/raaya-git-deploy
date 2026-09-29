@@ -30,6 +30,12 @@ public sealed class DeploymentWorkspaceViewModel
     public IReadOnlyList<DeploymentHistoryEntry> History { get; private set; } = Array.Empty<DeploymentHistoryEntry>();
     public bool IsExecuting => Volatile.Read(ref _executionInProgress) != 0;
     public bool IsReviewCurrent => PreviewReview is not null && PreviewPlan is not null && _previewProfile is not null && ReferenceEquals(Servers.SelectedProfile, _previewProfile) && Queue.Version == _previewQueueVersion;
+    public bool CanDeploy => IsReviewCurrent && !IsExecuting;
+    public string ReviewStatusMessage => PreviewReview is null
+        ? "Run Dry Run to create a reviewed deployment snapshot."
+        : IsReviewCurrent
+            ? "Dry Run review is current and ready for deployment confirmation."
+            : "Deployment inputs changed after Dry Run. Run Dry Run again before deploying.";
 
     public Task LoadServersAsync(CancellationToken cancellationToken) => Servers.LoadAsync(cancellationToken);
     public async Task LoadHistoryAsync(CancellationToken cancellationToken) => History = await _historyStore.LoadAsync(cancellationToken);
