@@ -23,6 +23,7 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
     [ObservableProperty] private GitCommitInfo? selectedCommit;
     [ObservableProperty] private GitChange? selectedCommitFile;
     [ObservableProperty] private string? selectedCommitDiffText;
+    [ObservableProperty] private DeploymentPlan? dryRunPlan;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string? errorMessage;
 
@@ -40,9 +41,14 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
     public IReadOnlyList<string> DeploymentQueuePaths => DeploymentQueueChanges.Select(static change => change.Path).ToArray();
     public int DeploymentQueueCount => DeploymentQueueChanges.Count;
     public bool HasDeploymentQueueItems => DeploymentQueueCount > 0;
+    public bool HasDryRunPlan => DryRunPlan is not null;
+    public int DryRunUploadCount => DryRunPlan?.Operations.Count(static operation => operation.Kind == DeploymentOperationKind.Upload) ?? 0;
+    public int DryRunDeleteCount => DryRunPlan?.Operations.Count(static operation => operation.Kind == DeploymentOperationKind.Delete) ?? 0;
+    public bool DryRunHasDestructiveOperations => DryRunDeleteCount > 0;
 
     partial void OnSelectedCommitChanged(GitCommitInfo? value) => OnPropertyChanged(nameof(CanCompareFromSelectedCommit));
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanCompareFromSelectedCommit));
+    partial void OnDryRunPlanChanged(DeploymentPlan? value) => NotifyDryRunChanged();
 
     public void ClearError() => ErrorMessage = null;
     public void ReportError(Exception exception) { ArgumentNullException.ThrowIfNull(exception); ErrorMessage = exception.Message; }
@@ -56,6 +62,12 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         if (!HasDeploymentQueueItems)
             throw new InvalidOperationException("Select at least one pending change before building a deployment plan.");
         return new DeploymentPlanner().Plan(repositoryRoot, remoteRoot, DeploymentQueueItems, dryRun);
+    }
+
+    public DeploymentPlan PrepareDryRun(string remoteRoot)
+    {
+        DryRunPlan = BuildDeploymentPlan(remoteRoot, dryRun: true);
+        return DryRunPlan;
     }
 
     public async Task OpenRepositoryAsync(string path, CancellationToken cancellationToken = default)
@@ -105,7 +117,7 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         try { await operation(); } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; } catch (Exception exception) { ErrorMessage = exception.Message; } finally { IsBusy = false; }
     }
 
-    private void ClearRepositoryState() { RepositoryPath = null; BranchName = null; HeadSha = null; BaseRef = null; SelectedDiffText = null; ClearChanges(); Commits.Clear(); ClearCommitSelection(); }
+    private void ClearRepositoryState() { RepositoryPath = null; BranchName = null; HeadSha = null; BaseRef = null; SelectedDiffText = null; DryRunPlan = null; ClearChanges(); Commits.Clear(); ClearCommitSelection(); }
     private void ClearCommitSelection() { SelectedCommit = null; CommitChanges.Clear(); SelectedCommitFile = null; SelectedCommitDiffText = null; }
     private void SetWorkingTreeChanges(IReadOnlyList<GitWorkingTreeChange> changes)
     { var domainChanges = changes.Select(static change => new GitChange(change.Path, change.Kind, change.OriginalPath)).ToArray(); var flagsByPath = changes.ToDictionary(static change => change.Path, static change => (change.IsStaged, change.IsUnstaged), StringComparer.Ordinal); SetChanges(domainChanges, item => flagsByPath.TryGetValue(item.Path, out var flags) ? flags : default); }
@@ -130,7 +142,8 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         }
     }
 
-    private void NotifyDeploymentQueueChanged() { OnPropertyChanged(nameof(DeploymentQueueChanges)); OnPropertyChanged(nameof(DeploymentQueueItems)); OnPropertyChanged(nameof(DeploymentQueuePaths)); OnPropertyChanged(nameof(DeploymentQueueCount)); OnPropertyChanged(nameof(HasDeploymentQueueItems)); }
+    private void NotifyDeploymentQueueChanged() { DryRunPlan = null; OnPropertyChanged(nameof(DeploymentQueueChanges)); OnPropertyChanged(nameof(DeploymentQueueItems)); OnPropertyChanged(nameof(DeploymentQueuePaths)); OnPropertyChanged(nameof(DeploymentQueueCount)); OnPropertyChanged(nameof(HasDeploymentQueueItems)); }
+    private void NotifyDryRunChanged() { OnPropertyChanged(nameof(HasDryRunPlan)); OnPropertyChanged(nameof(DryRunUploadCount)); OnPropertyChanged(nameof(DryRunDeleteCount)); OnPropertyChanged(nameof(DryRunHasDestructiveOperations)); }
     private void ClearChanges() { _reviewSession = null; Changes.Clear(); NotifyDeploymentQueueChanged(); }
     private string GetRequiredRepositoryPath() => !string.IsNullOrWhiteSpace(RepositoryPath) ? RepositoryPath : throw new InvalidOperationException("Open a Git repository before running this operation.");
 }
