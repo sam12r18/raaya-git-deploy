@@ -15,12 +15,13 @@ public sealed class CompanionDeploymentScreenStateTests
 
         Assert.Equal("Deploying", state.Card.Title);
         Assert.True(state.Card.ShowProgress);
+        Assert.Equal(CompanionDeploymentScreenAction.Refresh, state.PrimaryAction);
         Assert.Equal("Refresh", state.PrimaryActionText);
         Assert.True(state.PrimaryActionEnabled);
     }
 
     [Fact]
-    public void Failed_deployment_exposes_retry_action()
+    public void Failed_deployment_exposes_retry_action_that_requires_review_flow()
     {
         var presentation = new CompanionDeploymentPresentation(
             "run-2", "failed", null, "Upload failed",
@@ -30,7 +31,22 @@ public sealed class CompanionDeploymentScreenStateTests
         var state = CompanionDeploymentScreenState.From(presentation);
 
         Assert.Equal("Deployment failed", state.Card.Title);
+        Assert.Equal(CompanionDeploymentScreenAction.Retry, state.PrimaryAction);
         Assert.Equal("Retry", state.PrimaryActionText);
         Assert.True(state.PrimaryActionEnabled);
+    }
+
+    [Fact]
+    public void Successful_deployment_exposes_no_executable_action()
+    {
+        var presentation = new CompanionDeploymentPresentation(
+            "run-3", "succeeded", "Deployment completed", null,
+            DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow,
+            false, true, false, null);
+
+        var state = CompanionDeploymentScreenState.From(presentation);
+
+        Assert.Equal(CompanionDeploymentScreenAction.None, state.PrimaryAction);
+        Assert.False(state.PrimaryActionEnabled);
     }
 }
