@@ -7,6 +7,8 @@ namespace RaayaGitDeploy.App.Views;
 public sealed partial class RepositoryWorkspacePage
 {
     private (int Columns, int Rows)? _lastTerminalSize;
+    private readonly List<string> _terminalInputHistory = [];
+    private int _terminalInputHistoryIndex;
 
     private async void TerminalInput_KeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -26,11 +28,41 @@ public sealed partial class RepositoryWorkspacePage
             return;
         }
 
+        if (e.Key is VirtualKey.Up or VirtualKey.Down)
+        {
+            e.Handled = true;
+            NavigateTerminalInputHistory(e.Key == VirtualKey.Up ? -1 : 1);
+            return;
+        }
+
         if (e.Key != VirtualKey.Enter)
             return;
 
         e.Handled = true;
+        var command = TerminalInput.Text.Trim();
+        if (!string.IsNullOrWhiteSpace(command))
+        {
+            if (_terminalInputHistory.Count == 0 || !string.Equals(_terminalInputHistory[^1], command, StringComparison.Ordinal))
+                _terminalInputHistory.Add(command);
+            _terminalInputHistoryIndex = _terminalInputHistory.Count;
+        }
         TerminalSend_Click(sender, e);
+    }
+
+    private void NavigateTerminalInputHistory(int delta)
+    {
+        if (_terminalInputHistory.Count == 0)
+            return;
+
+        _terminalInputHistoryIndex = Math.Clamp(
+            _terminalInputHistoryIndex + delta,
+            0,
+            _terminalInputHistory.Count);
+
+        TerminalInput.Text = _terminalInputHistoryIndex == _terminalInputHistory.Count
+            ? string.Empty
+            : _terminalInputHistory[_terminalInputHistoryIndex];
+        TerminalInput.SelectionStart = TerminalInput.Text.Length;
     }
 
     private async void TerminalSurface_SizeChanged(object sender, SizeChangedEventArgs e)
