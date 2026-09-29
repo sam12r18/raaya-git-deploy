@@ -22,7 +22,7 @@ internal static class DeploymentConfirmationDialogFactory
         };
 
         var content = new StackPanel { Spacing = 10 };
-        if (confirmation.HasDestructiveOperations)
+        if (confirmation.IsDestructive)
         {
             content.Children.Add(new InfoBar
             {
