@@ -6,8 +6,10 @@ namespace RaayaGitDeploy.Android.Core.Shell;
 /// </summary>
 public sealed record CompanionDeploymentScreenState(
     CompanionDeploymentCard Card,
+    CompanionDeploymentScreenAction PrimaryAction,
     string? PrimaryActionText,
     bool PrimaryActionEnabled,
+    CompanionDeploymentScreenAction SecondaryAction,
     string? SecondaryActionText,
     bool SecondaryActionEnabled)
 {
@@ -17,11 +19,22 @@ public sealed record CompanionDeploymentScreenState(
         var card = CompanionDeploymentCard.From(presentation);
 
         if (card.CanRetry)
-            return new(card, "Retry", true, null, false);
+            return new(card, CompanionDeploymentScreenAction.Retry, "Retry", true, CompanionDeploymentScreenAction.None, null, false);
 
         if (card.CanRefresh)
-            return new(card, "Refresh", true, null, false);
+            return new(card, CompanionDeploymentScreenAction.Refresh, "Refresh", true, CompanionDeploymentScreenAction.None, null, false);
 
-        return new(card, null, false, null, false);
+        return new(card, CompanionDeploymentScreenAction.None, null, false, CompanionDeploymentScreenAction.None, null, false);
     }
+}
+
+/// <summary>
+/// Typed, allow-listed actions that an Android platform host may dispatch back to the
+/// companion workflow. No arbitrary command or transport operation can be encoded here.
+/// </summary>
+public enum CompanionDeploymentScreenAction
+{
+    None,
+    Refresh,
+    Retry
 }
