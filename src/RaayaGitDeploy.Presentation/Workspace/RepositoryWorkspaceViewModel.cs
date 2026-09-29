@@ -34,8 +34,12 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
 
     public string? AbbreviatedHeadSha => string.IsNullOrEmpty(HeadSha) ? null : HeadSha[..Math.Min(8, HeadSha.Length)];
     public bool CanCompareFromSelectedCommit => SelectedCommit is not null && !IsBusy;
-    public IReadOnlyList<string> DeploymentQueuePaths => Changes.Where(static item => item.IsSelectedForDeployment).Select(static item => item.Path).ToArray();
-    public int DeploymentQueueCount => DeploymentQueuePaths.Count;
+    public IReadOnlyList<GitChange> DeploymentQueueChanges => Changes
+        .Where(static item => item.IsSelectedForDeployment)
+        .Select(static item => new GitChange(item.Path, item.Kind, item.OriginalPath))
+        .ToArray();
+    public IReadOnlyList<string> DeploymentQueuePaths => DeploymentQueueChanges.Select(static change => change.Path).ToArray();
+    public int DeploymentQueueCount => DeploymentQueueChanges.Count;
     public bool HasDeploymentQueueItems => DeploymentQueueCount > 0;
 
     partial void OnSelectedCommitChanged(GitCommitInfo? value) => OnPropertyChanged(nameof(CanCompareFromSelectedCommit));
@@ -188,6 +192,7 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
 
     private void NotifyDeploymentQueueChanged()
     {
+        OnPropertyChanged(nameof(DeploymentQueueChanges));
         OnPropertyChanged(nameof(DeploymentQueuePaths));
         OnPropertyChanged(nameof(DeploymentQueueCount));
         OnPropertyChanged(nameof(HasDeploymentQueueItems));
