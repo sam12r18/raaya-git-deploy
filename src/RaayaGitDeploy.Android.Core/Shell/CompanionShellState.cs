@@ -25,6 +25,10 @@ public sealed class CompanionShellState
     public CompanionDeploymentActivityState DeploymentActivityState => _workflow.ActivityState;
     public string? DeploymentActivityMessage => _workflow.ActivityMessage;
     public string? CurrentDeploymentState => _workflow.CurrentRun?.State;
+    public string? CurrentDeploymentFailureMessage => _workflow.CurrentRun?.FailureMessage;
+    public DateTimeOffset? CurrentDeploymentStartedAt => _workflow.CurrentRun?.StartedAt;
+    public DateTimeOffset? CurrentDeploymentFinishedAt => _workflow.CurrentRun?.FinishedAt;
+    public bool HasDeploymentFailure => !string.IsNullOrWhiteSpace(_workflow.CurrentRun?.FailureMessage);
     public bool IsDeploymentTerminal => _workflow.IsCurrentRunTerminal;
     public bool CanRefreshDeployment => !IsBusy && _workflow.CurrentRun is not null && !_workflow.IsCurrentRunTerminal;
     public bool CanStartDeployment => !IsBusy && CanOpenDeployment && _workflow.Preview is not null && _workflow.ActivityState == CompanionDeploymentActivityState.Ready;
