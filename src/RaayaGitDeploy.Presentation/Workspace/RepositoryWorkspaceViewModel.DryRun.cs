@@ -9,6 +9,11 @@ public sealed record DryRunPresentationSnapshot(
     int DeleteCount)
 {
     public bool HasDestructiveOperations => DeleteCount > 0;
+    public bool RequiresExplicitConfirmation => HasDestructiveOperations;
+    public IReadOnlyList<string> DestructiveRemotePaths => Operations
+        .Where(static operation => operation.Kind == DeploymentOperationKind.Delete)
+        .Select(static operation => operation.RemotePath)
+        .ToArray();
 }
 
 public partial class RepositoryWorkspaceViewModel
