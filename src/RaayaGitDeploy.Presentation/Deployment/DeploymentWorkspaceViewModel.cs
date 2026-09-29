@@ -9,6 +9,7 @@ public sealed class DeploymentWorkspaceViewModel
     private readonly DeploymentExecutor _executor;
     private readonly IDeploymentHistoryStore _historyStore;
     private ServerProfile? _previewProfile;
+    private DeploymentReviewSnapshot? _previewReview;
     private long _previewQueueVersion = -1;
     private int _executionInProgress;
 
@@ -25,13 +26,13 @@ public sealed class DeploymentWorkspaceViewModel
     public DeploymentQueueViewModel Queue { get; }
     public ServersViewModel Servers { get; }
     public DeploymentPlan? PreviewPlan { get; private set; }
-    public DeploymentReviewSnapshot? PreviewReview { get; private set; }
+    public DeploymentReviewSnapshot? PreviewReview => IsReviewCurrent ? _previewReview : null;
     public DeploymentResult? LastResult { get; private set; }
     public IReadOnlyList<DeploymentHistoryEntry> History { get; private set; } = Array.Empty<DeploymentHistoryEntry>();
     public bool IsExecuting => Volatile.Read(ref _executionInProgress) != 0;
-    public bool IsReviewCurrent => PreviewReview is not null && PreviewPlan is not null && _previewProfile is not null && ReferenceEquals(Servers.SelectedProfile, _previewProfile) && Queue.Version == _previewQueueVersion;
+    public bool IsReviewCurrent => _previewReview is not null && PreviewPlan is not null && _previewProfile is not null && ReferenceEquals(Servers.SelectedProfile, _previewProfile) && Queue.Version == _previewQueueVersion;
     public bool CanDeploy => IsReviewCurrent && !IsExecuting;
-    public string ReviewStatusMessage => PreviewReview is null
+    public string ReviewStatusMessage => _previewReview is null
         ? "Run Dry Run to create a reviewed deployment snapshot."
         : IsReviewCurrent
             ? "Dry Run review is current and ready for deployment confirmation."
@@ -47,7 +48,7 @@ public sealed class DeploymentWorkspaceViewModel
         PreviewPlan = CreateDryRunPreview(repositoryRoot);
         _previewProfile = profile;
         _previewQueueVersion = Queue.Version;
-        PreviewReview = DeploymentReviewSnapshot.From(profile, PreviewPlan);
+        _previewReview = DeploymentReviewSnapshot.From(profile, PreviewPlan);
     }
 
     public void ResetForRepositoryChange()
@@ -104,7 +105,7 @@ public sealed class DeploymentWorkspaceViewModel
     private void InvalidateReview()
     {
         PreviewPlan = null;
-        PreviewReview = null;
+        _previewReview = null;
         _previewProfile = null;
         _previewQueueVersion = -1;
     }
