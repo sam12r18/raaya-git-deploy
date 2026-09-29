@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using RaayaGitDeploy.Core.Deployment;
 using RaayaGitDeploy.Core.Git;
 using RaayaGitDeploy.Core.Review;
 
@@ -37,6 +38,9 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
     public IReadOnlyList<GitChange> DeploymentQueueChanges => Changes
         .Where(static item => item.IsSelectedForDeployment)
         .Select(static item => new GitChange(item.Path, item.Kind, item.OriginalPath))
+        .ToArray();
+    public IReadOnlyList<DeploymentQueueItem> DeploymentQueueItems => DeploymentQueueChanges
+        .SelectMany(ToDeploymentQueueItems)
         .ToArray();
     public IReadOnlyList<string> DeploymentQueuePaths => DeploymentQueueChanges.Select(static change => change.Path).ToArray();
     public int DeploymentQueueCount => DeploymentQueueChanges.Count;
@@ -190,9 +194,31 @@ public partial class RepositoryWorkspaceViewModel : ObservableObject
         NotifyDeploymentQueueChanged();
     }
 
+    private static IEnumerable<DeploymentQueueItem> ToDeploymentQueueItems(GitChange change)
+    {
+        switch (change.Kind)
+        {
+            case GitChangeKind.Deleted:
+                yield return new DeploymentQueueItem(change.Path, DeploymentQueueSource.GitSelection, Action: DeploymentQueueAction.Delete);
+                yield break;
+            case GitChangeKind.Renamed:
+                if (string.IsNullOrWhiteSpace(change.OriginalPath))
+                    throw new InvalidOperationException($"Renamed Git change is missing its original path: {change.Path}");
+                yield return new DeploymentQueueItem(change.OriginalPath, DeploymentQueueSource.GitSelection, Action: DeploymentQueueAction.Delete);
+                yield return new DeploymentQueueItem(change.Path, DeploymentQueueSource.GitSelection);
+                yield break;
+            case GitChangeKind.Conflicted:
+                throw new InvalidOperationException($"Resolve the Git conflict before deploying: {change.Path}");
+            default:
+                yield return new DeploymentQueueItem(change.Path, DeploymentQueueSource.GitSelection);
+                yield break;
+        }
+    }
+
     private void NotifyDeploymentQueueChanged()
     {
         OnPropertyChanged(nameof(DeploymentQueueChanges));
+        OnPropertyChanged(nameof(DeploymentQueueItems));
         OnPropertyChanged(nameof(DeploymentQueuePaths));
         OnPropertyChanged(nameof(DeploymentQueueCount));
         OnPropertyChanged(nameof(HasDeploymentQueueItems));
