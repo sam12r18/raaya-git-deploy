@@ -26,6 +26,26 @@ public sealed class DeploymentDryRunViewModelTests
     }
 
     [Fact]
+    public void Preview_PreservesDeleteActionAndExplicitRemotePath()
+    {
+        var repositoryRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "raaya-workbench-repo"));
+        var deletedPath = Path.Combine(repositoryRoot, "src", "Legacy.cs");
+        var item = new DeploymentQueueItem(
+            deletedPath,
+            DeploymentQueueSource.GitDetected,
+            "/var/www/app/src/Legacy.cs",
+            DeploymentQueueAction.Delete);
+        var viewModel = new DeploymentDryRunViewModel(new DeploymentPlanner());
+
+        var plan = viewModel.Preview(repositoryRoot, Profile("prod", "Production"), [item]);
+
+        var operation = Assert.Single(plan.Operations);
+        Assert.Equal(DeploymentOperationKind.Delete, operation.Kind);
+        Assert.Equal("/var/www/app/src/Legacy.cs", operation.RemotePath);
+        Assert.True(plan.IsDryRun);
+    }
+
+    [Fact]
     public void Preview_RequiresSelectedServer()
     {
         var viewModel = new DeploymentDryRunViewModel(new DeploymentPlanner());
