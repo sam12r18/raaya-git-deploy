@@ -87,7 +87,36 @@ public sealed class CompanionShellState
 
     private async Task RunBusyAsync(Func<Task> operation, CancellationToken cancellationToken, Action? onSuccess = null, Action? onFailure = null)
     {
-        await RunBusyAsync(async () => { await operation().ConfigureAwait(false); return true; }, cancellationToken, onSuccess, onFailure).ConfigureAwait(false);
+        if (IsBusy) throw new InvalidOperationException("Another companion operation is already in progress.");
+        ClearError();
+        IsBusy = true;
+        try
+        {
+            await operation().ConfigureAwait(false);
+            onSuccess?.Invoke();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            onFailure?.Invoke();
+            throw;
+        }
+        catch (CompanionRateLimitedException exception)
+        {
+            onFailure?.Invoke();
+            LastError = exception.Message;
+            RetryAfter = exception.RetryAfter;
+            throw;
+        }
+        catch (Exception exception)
+        {
+            onFailure?.Invoke();
+            LastError = exception.Message;
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private async Task<T> RunBusyAsync<T>(Func<Task<T>> operation, CancellationToken cancellationToken, Action? onSuccess = null, Action? onFailure = null)
