@@ -34,8 +34,13 @@ public sealed class CompanionDeploymentHttpClient : ICompanionDeploymentApi
     public Task<CompanionDeploymentPreview> DryRunAsync(CompanionDeploymentRequest request, CancellationToken cancellationToken) =>
         SendAsync<CompanionDeploymentPreview>(HttpMethod.Post, $"{ApiRoot}deployments/dry-run", request, cancellationToken);
 
-    public Task<CompanionDeploymentRun> StartDeploymentAsync(string previewId, bool confirmed, CancellationToken cancellationToken) =>
-        SendAsync<CompanionDeploymentRun>(HttpMethod.Post, $"{ApiRoot}deployments", new StartDeploymentRequest(previewId, confirmed), cancellationToken);
+    public Task<CompanionDeploymentRun> StartDeploymentAsync(string previewId, bool confirmed, CancellationToken cancellationToken)
+    {
+        if (!confirmed)
+            throw new InvalidOperationException("Mobile deployment requires an explicit confirmation of the reviewed preview.");
+
+        return SendAsync<CompanionDeploymentRun>(HttpMethod.Post, $"{ApiRoot}deployments", new StartDeploymentRequest(previewId, true), cancellationToken);
+    }
 
     public Task<CompanionDeploymentRun> GetDeploymentAsync(string deploymentId, CancellationToken cancellationToken) =>
         SendAsync<CompanionDeploymentRun>(HttpMethod.Get, $"{ApiRoot}deployments/{Escape(deploymentId)}", null, cancellationToken);
