@@ -13,8 +13,9 @@ public sealed partial class RepositoryWorkspacePage
 
     private async void TerminalInput_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key == VirtualKey.C &&
-            (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0)
+        var controlDown = (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
+
+        if (e.Key == VirtualKey.C && controlDown)
         {
             e.Handled = true;
             try
@@ -26,6 +27,15 @@ public sealed partial class RepositoryWorkspacePage
             {
                 ShowError(ex.Message);
             }
+            return;
+        }
+
+        if (e.Key == VirtualKey.L && controlDown)
+        {
+            e.Handled = true;
+            _terminal.ClearOutput();
+            TerminalOutput.Text = string.Empty;
+            TerminalScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
             return;
         }
 
