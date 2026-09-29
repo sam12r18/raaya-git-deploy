@@ -44,8 +44,38 @@ public sealed class CompanionShellDeploymentFlowTests
         Assert.Equal(1, api.RefreshCount);
     }
 
+    [Fact]
+    public async Task Shell_PollDeploymentUntilTerminal_RefreshesUntilSucceeded()
+    {
+        var api = new FlowApi(["running", "running", "succeeded"]);
+        var workflow = new CompanionDeploymentWorkflow(api);
+        var shell = new CompanionShellState(workflow);
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await workflow.LoadRepositoriesAsync(cancellationToken);
+        await workflow.SelectRepositoryAsync("repo-1", cancellationToken);
+        workflow.SelectProfile("prod");
+        shell.OpenDeployment();
+        await shell.DryRunAsync(["src/app.cs"], cancellationToken);
+        await shell.StartDeploymentAsync(confirmed: true, cancellationToken);
+
+        var completed = await shell.PollDeploymentUntilTerminalAsync(5, TimeSpan.Zero, cancellationToken);
+
+        Assert.Equal("succeeded", completed.State);
+        Assert.True(shell.IsDeploymentTerminal);
+        Assert.False(shell.CanRefreshDeployment);
+        Assert.False(shell.IsBusy);
+        Assert.Null(shell.LastError);
+        Assert.Equal(3, api.RefreshCount);
+    }
+
     private sealed class FlowApi : ICompanionDeploymentApi
     {
+        private readonly Queue<string> _refreshStates;
+
+        public FlowApi(IEnumerable<string>? refreshStates = null) =>
+            _refreshStates = new Queue<string>(refreshStates ?? ["succeeded"]);
+
         public int StartCount { get; private set; }
         public int RefreshCount { get; private set; }
 
@@ -79,8 +109,10 @@ public sealed class CompanionShellDeploymentFlowTests
         {
             Assert.Equal("deploy-1", deploymentId);
             RefreshCount++;
+            var state = _refreshStates.Count > 0 ? _refreshStates.Dequeue() : "succeeded";
+            var completedAt = string.Equals(state, "succeeded", StringComparison.OrdinalIgnoreCase) ? DateTimeOffset.UtcNow : null;
             return Task.FromResult(new CompanionDeploymentRun(
-                deploymentId, "repo-1", "prod", "succeeded", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null));
+                deploymentId, "repo-1", "prod", state, DateTimeOffset.UtcNow, completedAt, null));
         }
     }
 }
