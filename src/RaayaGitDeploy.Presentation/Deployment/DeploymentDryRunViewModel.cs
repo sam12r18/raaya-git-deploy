@@ -25,10 +25,12 @@ public sealed class DeploymentDryRunViewModel(DeploymentPlanner planner)
             throw new InvalidOperationException("Add at least one file or folder to the Deploy Queue before running Dry Run.");
         }
 
+        // Preserve the queue contract all the way into planning. Git-derived delete/rename
+        // entries carry an explicit action/remote path that would be lost if reduced to LocalPath.
         return _planner.Plan(
             repositoryRoot,
             selectedProfile.RemoteRoot,
-            items.Select(item => item.LocalPath),
+            items,
             dryRun: true);
     }
 }
