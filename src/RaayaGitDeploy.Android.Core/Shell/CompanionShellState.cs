@@ -35,6 +35,17 @@ public sealed class CompanionShellState
     public bool IsDeploymentTerminal => _workflow.IsCurrentRunTerminal;
     public bool CanRefreshDeployment => !IsBusy && IsDeploymentRunning;
     public bool CanStartDeployment => !IsBusy && CanOpenDeployment && _workflow.Preview is not null && _workflow.ActivityState == CompanionDeploymentActivityState.Ready;
+    public CompanionDeploymentPresentation DeploymentPresentation => new(
+        CurrentDeploymentId,
+        CurrentDeploymentState,
+        DeploymentActivityMessage,
+        CurrentDeploymentFailureMessage,
+        CurrentDeploymentStartedAt,
+        CurrentDeploymentFinishedAt,
+        IsDeploymentRunning,
+        IsDeploymentTerminal,
+        CanRefreshDeployment,
+        RetryAfter);
 
     public void OpenRepositories() => Screen = CompanionShellScreen.Repositories;
     public void OpenProfiles() { if (!CanOpenProfiles) throw new InvalidOperationException("Select an authorized repository before opening deployment profiles."); Screen = CompanionShellScreen.Profiles; }
@@ -80,5 +91,17 @@ public sealed class CompanionShellState
         finally { IsBusy = false; }
     }
 }
+
+public sealed record CompanionDeploymentPresentation(
+    string? DeploymentId,
+    string? State,
+    string? ActivityMessage,
+    string? FailureMessage,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? FinishedAt,
+    bool IsRunning,
+    bool IsTerminal,
+    bool CanRefresh,
+    TimeSpan? RetryAfter);
 
 public enum CompanionShellScreen { Repositories, Profiles, Deployment, History, HistoryDetail }
