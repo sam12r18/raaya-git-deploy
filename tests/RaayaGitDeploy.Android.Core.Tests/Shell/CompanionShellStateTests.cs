@@ -44,6 +44,49 @@ public sealed class CompanionShellStateTests
     }
 
     [Fact]
+    public async Task Shell_ExposesSucceededDeploymentResultWithoutTransportDetails()
+    {
+        var workflow = new CompanionDeploymentWorkflow(new FakeApi());
+        var shell = new CompanionShellState(workflow);
+        await workflow.LoadRepositoriesAsync(CancellationToken.None);
+        await workflow.SelectRepositoryAsync("repo-1", CancellationToken.None);
+        workflow.SelectProfile("prod");
+
+        await shell.DryRunAsync(["src/app.cs"], CancellationToken.None);
+        await shell.StartDeploymentAsync(true, CancellationToken.None);
+        await shell.RefreshDeploymentAsync(CancellationToken.None);
+
+        Assert.Equal("succeeded", shell.CurrentDeploymentState);
+        Assert.True(shell.IsDeploymentTerminal);
+        Assert.False(shell.HasDeploymentFailure);
+        Assert.Null(shell.CurrentDeploymentFailureMessage);
+        Assert.NotNull(shell.CurrentDeploymentStartedAt);
+        Assert.NotNull(shell.CurrentDeploymentFinishedAt);
+        Assert.False(shell.CanRefreshDeployment);
+    }
+
+    [Fact]
+    public async Task Shell_ExposesFailedDeploymentMessageAsTerminalPresentationState()
+    {
+        var workflow = new CompanionDeploymentWorkflow(new FakeApi { FailDeployment = true });
+        var shell = new CompanionShellState(workflow);
+        await workflow.LoadRepositoriesAsync(CancellationToken.None);
+        await workflow.SelectRepositoryAsync("repo-1", CancellationToken.None);
+        workflow.SelectProfile("prod");
+
+        await shell.DryRunAsync(["src/app.cs"], CancellationToken.None);
+        await shell.StartDeploymentAsync(true, CancellationToken.None);
+        await shell.RefreshDeploymentAsync(CancellationToken.None);
+
+        Assert.Equal("failed", shell.CurrentDeploymentState);
+        Assert.True(shell.IsDeploymentTerminal);
+        Assert.True(shell.HasDeploymentFailure);
+        Assert.Equal("Upload failed.", shell.CurrentDeploymentFailureMessage);
+        Assert.NotNull(shell.CurrentDeploymentFinishedAt);
+        Assert.False(shell.CanRefreshDeployment);
+    }
+
+    [Fact]
     public async Task Shell_LoadsAuthorizedHistoryDetailBeforeOpeningDetailScreen()
     {
         var api = new FakeApi();
@@ -120,6 +163,7 @@ public sealed class CompanionShellStateTests
         public string? LastDeploymentDetailId { get; private set; }
         public bool FailDeploymentDetail { get; init; }
         public bool CancelDeploymentDetail { get; init; }
+        public bool FailDeployment { get; init; }
 
         public Task<IReadOnlyList<CompanionRepository>> GetRepositoriesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanionRepository>>([new("repo-1", "Repo", "main", "abc123", true)]);
@@ -140,7 +184,8 @@ public sealed class CompanionShellStateTests
                 request.Paths.Select(path => new CompanionDeploymentOperation(path, "/remote/" + path, "upload")).ToArray(),
                 DateTimeOffset.UtcNow));
 
-        public Task<CompanionDeploymentRun> StartDeploymentAsync(string previewId, bool confirmed, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<CompanionDeploymentRun> StartDeploymentAsync(string previewId, bool confirmed, CancellationToken cancellationToken) =>
+            Task.FromResult(new CompanionDeploymentRun("run-1", "repo-1", "prod", "running", DateTimeOffset.UtcNow, null, null));
 
         public Task<CompanionDeploymentRun> GetDeploymentAsync(string deploymentId, CancellationToken cancellationToken)
         {
@@ -150,7 +195,9 @@ public sealed class CompanionShellStateTests
             if (FailDeploymentDetail)
                 throw new HttpRequestException("Agent unavailable.");
 
-            return Task.FromResult(new CompanionDeploymentRun(deploymentId, "repo-1", "prod", "succeeded", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null));
+            var state = FailDeployment ? "failed" : "succeeded";
+            var failure = FailDeployment ? "Upload failed." : null;
+            return Task.FromResult(new CompanionDeploymentRun(deploymentId, "repo-1", "prod", state, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, failure));
         }
     }
 }
