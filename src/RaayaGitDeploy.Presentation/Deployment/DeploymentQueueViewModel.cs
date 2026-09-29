@@ -8,6 +8,7 @@ public sealed class DeploymentQueueViewModel
     private readonly ObservableCollection<DeploymentQueueItem> _items = [];
 
     public IReadOnlyList<DeploymentQueueItem> Items => _items;
+    public long Version { get; private set; }
 
     public void AddGitSelection(string localPath) => Add(localPath, DeploymentQueueSource.GitSelection);
 
@@ -15,9 +16,17 @@ public sealed class DeploymentQueueViewModel
 
     public void AddFolder(string localPath) => Add(localPath, DeploymentQueueSource.ManualFolder);
 
-    public void Remove(DeploymentQueueItem item) => _items.Remove(item);
+    public void Remove(DeploymentQueueItem item)
+    {
+        if (_items.Remove(item)) Version++;
+    }
 
-    public void Clear() => _items.Clear();
+    public void Clear()
+    {
+        if (_items.Count == 0) return;
+        _items.Clear();
+        Version++;
+    }
 
     private void Add(string localPath, DeploymentQueueSource source)
     {
@@ -30,6 +39,7 @@ public sealed class DeploymentQueueViewModel
         }
 
         _items.Add(new DeploymentQueueItem(normalizedPath, source));
+        Version++;
     }
 
     private static string Normalize(string path)
