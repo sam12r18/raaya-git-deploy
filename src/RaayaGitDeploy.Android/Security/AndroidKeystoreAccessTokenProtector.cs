@@ -87,11 +87,18 @@ public sealed class AndroidKeystoreAccessTokenProtector : Java.Lang.Object, IPla
 /// Persists only the already-encrypted Keystore payload in app-private SharedPreferences.
 /// Raw tokens and transport credentials are never written here.
 /// </summary>
-public sealed class AndroidProtectedAccessTokenPersistence(Context context) : IProtectedAccessTokenPersistence
+public sealed class AndroidProtectedAccessTokenPersistence
+    : Java.Lang.Object, IProtectedAccessTokenPersistence
 {
     private const string PreferenceName = "raaya_git_deploy_secure_session";
     private const string TokenKey = "protected_companion_token";
-    private readonly Context _context = context.ApplicationContext ?? context;
+    private readonly Context _context;
+
+    public AndroidProtectedAccessTokenPersistence(Context context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        _context = context.ApplicationContext ?? context;
+    }
 
     public Task<byte[]?> ReadAsync(CancellationToken cancellationToken)
     {
