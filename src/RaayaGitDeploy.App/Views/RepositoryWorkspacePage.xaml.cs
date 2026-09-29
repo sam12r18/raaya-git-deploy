@@ -71,7 +71,17 @@ public sealed partial class RepositoryWorkspacePage : Page
 
     private async Task LoadDeploymentAsync() { try { await _deployment.LoadServersAsync(CancellationToken.None); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
     private async Task LoadHistoryAsync() { try { await _deployment.LoadHistoryAsync(CancellationToken.None); RefreshHistorySurface(); } catch (Exception ex) { ShowError(ex.Message); } }
-    private void RefreshDeploymentSurface() { DeployQueueList.ItemsSource = null; DeployQueueList.ItemsSource = _deployment.Queue.Items; ServersList.ItemsSource = null; ServersList.ItemsSource = _deployment.Servers.Profiles; ServersList.SelectedItem = _deployment.Servers.SelectedProfile; DryRunList.ItemsSource = _deployment.PreviewPlan?.Operations; }
+    private void RefreshDeploymentSurface()
+    {
+        DeployQueueList.ItemsSource = null;
+        DeployQueueList.ItemsSource = _deployment.Queue.Items;
+        ServersList.ItemsSource = null;
+        ServersList.ItemsSource = _deployment.Servers.Profiles;
+        ServersList.SelectedItem = _deployment.Servers.SelectedProfile;
+        DryRunList.ItemsSource = _deployment.PreviewPlan?.Operations;
+        DeployButton.IsEnabled = _deployment.CanDeploy;
+        DeployReadinessText.Text = _deployment.ReviewStatusMessage;
+    }
     private void RefreshHistorySurface() { HistoryList.ItemsSource = null; HistoryList.ItemsSource = _deployment.History; if (_deployment.History.Count > 0) HistoryList.SelectedIndex = 0; }
     private void DeployAddSelectedChange_Click(object sender, RoutedEventArgs e) { try { if (ChangesList.SelectedItem is not ChangeItemViewModel change) throw new InvalidOperationException("Select a changed file first."); if (string.IsNullOrWhiteSpace(ViewModel.RepositoryPath)) throw new InvalidOperationException("Open a repository first."); _deployment.Queue.AddGitSelection(Path.Combine(ViewModel.RepositoryPath, change.Path)); RefreshDeploymentSurface(); } catch (Exception ex) { ShowError(ex.Message); } }
     private void DeployClear_Click(object sender, RoutedEventArgs e) { _deployment.Queue.Clear(); RefreshDeploymentSurface(); }
@@ -99,6 +109,7 @@ public sealed partial class RepositoryWorkspacePage : Page
     private void ServersList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         _deployment.Servers.SelectedProfile = ServersList.SelectedItem as ServerProfile;
+        RefreshDeploymentSurface();
         ServerConnectionStatus.Text = string.Empty;
         if (_deployment.Servers.SelectedProfile is not { } p) return;
         ServerName.Text = p.DisplayName;
@@ -122,7 +133,7 @@ public sealed partial class RepositoryWorkspacePage : Page
         ServerKeyReference.PlaceholderText = transport == ServerTransportKind.Sftp ? "Key path or credential reference" : "Desktop/agent credential reference (no raw password)";
         if (resetDefaultPort) ServerPort.Text = transport == ServerTransportKind.Sftp ? "22" : "21";
     }
-    private void ServerNew_Click(object sender, RoutedEventArgs e) { _deployment.Servers.SelectedProfile=null; ServersList.SelectedItem=null; ServerName.Text=ServerHost.Text=ServerUsername.Text=ServerRemoteRoot.Text=ServerKeyReference.Text=string.Empty; ServerTransport.SelectedIndex=0; ServerPort.Text="22"; ServerConnectionStatus.Text=string.Empty; UpdateServerTransportFields(ServerTransportKind.Sftp, resetDefaultPort:false); }
+    private void ServerNew_Click(object sender, RoutedEventArgs e) { _deployment.Servers.SelectedProfile=null; ServersList.SelectedItem=null; ServerName.Text=ServerHost.Text=ServerUsername.Text=ServerRemoteRoot.Text=ServerKeyReference.Text=string.Empty; ServerTransport.SelectedIndex=0; ServerPort.Text="22"; ServerConnectionStatus.Text=string.Empty; UpdateServerTransportFields(ServerTransportKind.Sftp, resetDefaultPort:false); RefreshDeploymentSurface(); }
     private async void ServerSave_Click(object sender, RoutedEventArgs e)
     {
         try
