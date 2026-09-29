@@ -9,6 +9,7 @@ public sealed partial class RepositoryWorkspacePage
     private (int Columns, int Rows)? _lastTerminalSize;
     private readonly List<string> _terminalInputHistory = [];
     private int _terminalInputHistoryIndex;
+    private string _terminalInputDraft = string.Empty;
 
     private async void TerminalInput_KeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -45,6 +46,7 @@ public sealed partial class RepositoryWorkspacePage
             if (_terminalInputHistory.Count == 0 || !string.Equals(_terminalInputHistory[^1], command, StringComparison.Ordinal))
                 _terminalInputHistory.Add(command);
             _terminalInputHistoryIndex = _terminalInputHistory.Count;
+            _terminalInputDraft = string.Empty;
         }
         TerminalSend_Click(sender, e);
     }
@@ -54,13 +56,16 @@ public sealed partial class RepositoryWorkspacePage
         if (_terminalInputHistory.Count == 0)
             return;
 
+        if (delta < 0 && _terminalInputHistoryIndex == _terminalInputHistory.Count)
+            _terminalInputDraft = TerminalInput.Text;
+
         _terminalInputHistoryIndex = Math.Clamp(
             _terminalInputHistoryIndex + delta,
             0,
             _terminalInputHistory.Count);
 
         TerminalInput.Text = _terminalInputHistoryIndex == _terminalInputHistory.Count
-            ? string.Empty
+            ? _terminalInputDraft
             : _terminalInputHistory[_terminalInputHistoryIndex];
         TerminalInput.SelectionStart = TerminalInput.Text.Length;
     }
