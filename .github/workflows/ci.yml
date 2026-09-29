@@ -48,3 +48,26 @@ jobs:
 
       - name: Test Android companion core
         run: dotnet test tests/RaayaGitDeploy.Android.Core.Tests/RaayaGitDeploy.Android.Core.Tests.csproj --configuration Release --no-build
+
+  android-platform-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+
+      - name: Install Android workload
+        run: dotnet workload install android
+
+      - name: Restore Android platform host
+        run: dotnet restore src/RaayaGitDeploy.Android/RaayaGitDeploy.Android.csproj
+
+      - name: Build Android platform host
+        run: dotnet build src/RaayaGitDeploy.Android/RaayaGitDeploy.Android.csproj --configuration Release --no-restore
