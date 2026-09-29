@@ -102,7 +102,9 @@ public sealed class DeploymentWorkspaceViewModel
             var profile = Servers.SelectedProfile ?? throw new InvalidOperationException("Select a server profile before deployment.");
             var preview = PreviewPlan ?? throw new InvalidOperationException("Run Dry Run before deployment.");
 
-            var plan = _planner.Plan(repositoryRoot, profile.RemoteRoot, Queue.Items.Select(item => item.LocalPath), dryRun: false);
+            // Preserve the exact queue contract used by Dry Run. Reducing entries to LocalPath here
+            // would turn Git-derived delete/rename operations back into uploads at execution time.
+            var plan = _planner.Plan(repositoryRoot, profile.RemoteRoot, Queue.Items, dryRun: false);
             if (_previewProfile is null || profile != _previewProfile || !preview.Operations.SequenceEqual(plan.Operations))
                 throw new InvalidOperationException("Deployment inputs changed after Dry Run. Run Dry Run again and review the updated plan before deploying.");
 
