@@ -18,6 +18,7 @@ public sealed class DeploymentScreenView : LinearLayout
     private readonly ProgressBar _progress;
     private readonly Button _primary;
     private readonly Button _secondary;
+    private readonly Dictionary<Button, EventHandler> _handlers = new();
 
     public DeploymentScreenView(Context context) : base(context)
     {
@@ -54,18 +55,14 @@ public sealed class DeploymentScreenView : LinearLayout
         BindAction(_secondary, state.SecondaryAction, state.SecondaryActionText, state.SecondaryActionEnabled, dispatchAsync);
     }
 
-    private static void BindAction(Button button, CompanionDeploymentScreenAction action, string? text, bool enabled, Func<CompanionDeploymentScreenAction, Task> dispatchAsync)
+    private void BindAction(Button button, CompanionDeploymentScreenAction action, string? text, bool enabled, Func<CompanionDeploymentScreenAction, Task> dispatchAsync)
     {
+        if (_handlers.Remove(button, out var previous)) button.Click -= previous;
+
         button.Text = text ?? string.Empty;
         button.Enabled = enabled && action != CompanionDeploymentScreenAction.None;
         button.Visibility = action == CompanionDeploymentScreenAction.None ? ViewStates.Gone : ViewStates.Visible;
-        button.Click -= button.Tag as EventHandler;
-
-        if (action == CompanionDeploymentScreenAction.None)
-        {
-            button.Tag = null;
-            return;
-        }
+        if (action == CompanionDeploymentScreenAction.None) return;
 
         EventHandler handler = async (_, _) =>
         {
@@ -73,7 +70,7 @@ public sealed class DeploymentScreenView : LinearLayout
             try { await dispatchAsync(action); }
             finally { button.Enabled = enabled; }
         };
-        button.Tag = handler;
+        _handlers[button] = handler;
         button.Click += handler;
     }
 }
