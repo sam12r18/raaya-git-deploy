@@ -30,6 +30,7 @@ public sealed class DeploymentWorkspaceViewModel
     public DeploymentQueueViewModel Queue { get; }
     public ServersViewModel Servers { get; }
     public DeploymentPlan? PreviewPlan { get; private set; }
+    public DeploymentReviewSnapshot? PreviewReview { get; private set; }
     public DeploymentResult? LastResult { get; private set; }
     public IReadOnlyList<DeploymentHistoryEntry> History { get; private set; } = Array.Empty<DeploymentHistoryEntry>();
     public bool IsExecuting => Volatile.Read(ref _executionInProgress) != 0;
@@ -42,8 +43,10 @@ public sealed class DeploymentWorkspaceViewModel
 
     public void RefreshDryRunPreview(string repositoryRoot)
     {
+        var profile = Servers.SelectedProfile ?? throw new InvalidOperationException("Select a server profile before Dry Run.");
         PreviewPlan = CreateDryRunPreview(repositoryRoot);
-        _previewProfile = Servers.SelectedProfile;
+        _previewProfile = profile;
+        PreviewReview = DeploymentReviewSnapshot.From(profile, PreviewPlan);
     }
 
     public void ResetForRepositoryChange()
@@ -53,6 +56,7 @@ public sealed class DeploymentWorkspaceViewModel
 
         Queue.Clear();
         PreviewPlan = null;
+        PreviewReview = null;
         _previewProfile = null;
         LastResult = null;
     }
@@ -88,6 +92,7 @@ public sealed class DeploymentWorkspaceViewModel
 
         Servers.SelectedProfile = profile;
         PreviewPlan = null;
+        PreviewReview = null;
         _previewProfile = null;
         LastResult = null;
     }
@@ -120,5 +125,36 @@ public sealed class DeploymentWorkspaceViewModel
         {
             Interlocked.Exchange(ref _executionInProgress, 0);
         }
+    }
+}
+
+public sealed record DeploymentReviewSnapshot(
+    string ServerProfileId,
+    string ServerProfileName,
+    string RemoteRoot,
+    IReadOnlyList<DeploymentOperation> Operations,
+    int UploadCount,
+    int DeleteCount,
+    IReadOnlyList<string> DestructiveRemotePaths)
+{
+    public bool RequiresExplicitConfirmation => DeleteCount > 0;
+
+    public static DeploymentReviewSnapshot From(ServerProfile profile, DeploymentPlan plan)
+    {
+        var operations = plan.Operations.ToArray();
+        var destructivePaths = operations
+            .Where(operation => operation.Kind == DeploymentOperationKind.Delete)
+            .Select(operation => operation.RemotePath)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return new DeploymentReviewSnapshot(
+            profile.Id,
+            profile.DisplayName,
+            profile.RemoteRoot,
+            operations,
+            operations.Count(operation => operation.Kind == DeploymentOperationKind.Upload),
+            destructivePaths.Length,
+            destructivePaths);
     }
 }
