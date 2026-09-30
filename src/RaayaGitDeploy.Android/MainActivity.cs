@@ -11,7 +11,7 @@ namespace RaayaGitDeploy.Android;
 public sealed class MainActivity : Activity
 {
     private DeploymentScreenView? _deploymentView;
-    private IAccessTokenStore? _accessTokenStore;
+    private CompanionSessionLifecycle? _sessionLifecycle;
 
     protected override async void OnCreate(Bundle? savedInstanceState)
     {
@@ -19,18 +19,18 @@ public sealed class MainActivity : Activity
         _deploymentView = new DeploymentScreenView(this);
         SetContentView(_deploymentView);
 
-        _accessTokenStore = AndroidAccessTokenStoreFactory.Create(this);
+        var accessTokenStore = AndroidAccessTokenStoreFactory.Create(this);
+        _sessionLifecycle = new CompanionSessionLifecycle(accessTokenStore);
         var hasProtectedSession = false;
         try
         {
-            hasProtectedSession = !string.IsNullOrWhiteSpace(
-                await _accessTokenStore.GetAccessTokenAsync(CancellationToken.None));
+            hasProtectedSession = await _sessionLifecycle.RestoreAsync(CancellationToken.None);
         }
         catch
         {
             // A missing/invalidated Keystore key must degrade to re-authentication, never to
             // plaintext persistence or a less secure credential path.
-            await _accessTokenStore.ClearAsync(CancellationToken.None);
+            await _sessionLifecycle.SignOutAsync(CancellationToken.None);
         }
 
         var initial = new CompanionDeploymentScreenState(
