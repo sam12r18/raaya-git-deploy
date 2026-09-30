@@ -6,6 +6,8 @@ namespace RaayaGitDeploy.App.Views;
 
 public sealed partial class RepositoryWorkspacePage
 {
+    private bool _gitMutationInProgress;
+
     private RepositoryCommitWorkflow CommitWorkflow =>
         ((App)Application.Current).Services.GetRequiredService<RepositoryCommitWorkflow>();
 
@@ -14,6 +16,7 @@ public sealed partial class RepositoryWorkspacePage
 
     private async void StageSelected_Click(object sender, RoutedEventArgs e)
     {
+        if (!TryBeginGitMutation("Staging selected paths...")) return;
         try
         {
             var selected = SelectedChanges().Where(change => change.IsUnstaged).ToArray();
@@ -27,10 +30,15 @@ public sealed partial class RepositoryWorkspacePage
         {
             ShowError(ex.Message);
         }
+        finally
+        {
+            EndGitMutation();
+        }
     }
 
     private async void UnstageSelected_Click(object sender, RoutedEventArgs e)
     {
+        if (!TryBeginGitMutation("Unstaging selected paths...")) return;
         try
         {
             var selected = SelectedChanges().Where(change => change.IsStaged).ToArray();
@@ -44,10 +52,15 @@ public sealed partial class RepositoryWorkspacePage
         {
             ShowError(ex.Message);
         }
+        finally
+        {
+            EndGitMutation();
+        }
     }
 
     private async void CommitStaged_Click(object sender, RoutedEventArgs e)
     {
+        if (!TryBeginGitMutation("Creating commit...")) return;
         try
         {
             var message = CommitMessageTextBox.Text.Trim();
@@ -63,7 +76,26 @@ public sealed partial class RepositoryWorkspacePage
         {
             ShowError(ex.Message);
         }
+        finally
+        {
+            EndGitMutation();
+        }
     }
+
+    private bool TryBeginGitMutation(string status)
+    {
+        if (_gitMutationInProgress)
+        {
+            GitMutationStatus.Text = "A Git index/commit operation is already running.";
+            return false;
+        }
+
+        _gitMutationInProgress = true;
+        GitMutationStatus.Text = status;
+        return true;
+    }
+
+    private void EndGitMutation() => _gitMutationInProgress = false;
 
     private void RefreshGitMutationSurface(string status)
     {
