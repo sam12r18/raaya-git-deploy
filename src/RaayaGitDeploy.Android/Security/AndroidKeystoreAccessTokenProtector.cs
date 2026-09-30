@@ -111,16 +111,18 @@ public sealed class AndroidProtectedAccessTokenPersistence : IProtectedAccessTok
         ArgumentNullException.ThrowIfNull(protectedToken);
         cancellationToken.ThrowIfCancellationRequested();
         if (protectedToken.Length == 0) throw new ArgumentException("Protected token payload cannot be empty.", nameof(protectedToken));
-        if (!Preferences.Edit()!.PutString(TokenKey, Convert.ToBase64String(protectedToken))!.Commit())
-            throw new IOException("Could not persist the protected companion session.");
+        using var editor = Preferences.Edit() ?? throw new IOException("Could not edit protected companion session preferences.");
+        editor.PutString(TokenKey, Convert.ToBase64String(protectedToken));
+        if (!editor.Commit()) throw new IOException("Could not persist the protected companion session.");
         return Task.CompletedTask;
     }
 
     public Task ClearAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!Preferences.Edit()!.Remove(TokenKey)!.Commit())
-            throw new IOException("Could not clear the protected companion session.");
+        using var editor = Preferences.Edit() ?? throw new IOException("Could not edit protected companion session preferences.");
+        editor.Remove(TokenKey);
+        if (!editor.Commit()) throw new IOException("Could not clear the protected companion session.");
         return Task.CompletedTask;
     }
 
