@@ -16,12 +16,12 @@ public sealed partial class RepositoryWorkspacePage
     {
         try
         {
-            var selected = SelectedChanges();
-            if (selected.Count == 0)
-                throw new InvalidOperationException("Select one or more changed paths before staging.");
+            var selected = SelectedChanges().Where(change => change.IsUnstaged).ToArray();
+            if (selected.Length == 0)
+                throw new InvalidOperationException("Select one or more unstaged paths before staging.");
 
             await CommitWorkflow.StageAsync(selected, CancellationToken.None);
-            RefreshGitMutationSurface($"Staged {selected.Count} selected path(s).");
+            RefreshGitMutationSurface($"Staged {selected.Length} selected path(s).");
         }
         catch (Exception ex)
         {
@@ -33,12 +33,12 @@ public sealed partial class RepositoryWorkspacePage
     {
         try
         {
-            var selected = SelectedChanges();
-            if (selected.Count == 0)
-                throw new InvalidOperationException("Select one or more changed paths before unstaging.");
+            var selected = SelectedChanges().Where(change => change.IsStaged).ToArray();
+            if (selected.Length == 0)
+                throw new InvalidOperationException("Select one or more staged paths before unstaging.");
 
             await CommitWorkflow.UnstageAsync(selected, CancellationToken.None);
-            RefreshGitMutationSurface($"Unstaged {selected.Count} selected path(s).");
+            RefreshGitMutationSurface($"Unstaged {selected.Length} selected path(s).");
         }
         catch (Exception ex)
         {
