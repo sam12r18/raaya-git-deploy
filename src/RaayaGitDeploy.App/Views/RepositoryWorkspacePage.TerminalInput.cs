@@ -17,6 +17,11 @@ public sealed partial class RepositoryWorkspacePage
 
         if (e.Key == VirtualKey.C && controlDown)
         {
+            // Preserve the normal editor-grade copy gesture when input text is selected.
+            // Ctrl+C only becomes a terminal interrupt when there is no local selection to copy.
+            if (TerminalInput.SelectionLength > 0)
+                return;
+
             e.Handled = true;
             try
             {
