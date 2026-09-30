@@ -1,21 +1,19 @@
 using Android.App;
 using Android.OS;
-using Android.Text;
 using Android.Views;
 using Android.Widget;
 using RaayaGitDeploy.Android.Core.Api;
+using RaayaGitDeploy.Android.Core.Deployment;
 using RaayaGitDeploy.Android.Core.Security;
-using RaayaGitDeploy.Android.Core.Shell;
 using RaayaGitDeploy.Android.Security;
-using RaayaGitDeploy.Core.Companion;
 
 namespace RaayaGitDeploy.Android;
 
-[Activity(Label = "Raaya Git Deploy", MainLauncher = true, Exported = true)]
+[Activity(Label = "Raaya Git Deploy", MainLauncher = true)]
 public sealed class MainActivity : Activity
 {
-    private DeploymentScreenView? _deploymentView;
     private CompanionSessionLifecycle? _sessionLifecycle;
+    private CompanionDeploymentView? _deploymentView;
     private TextView? _sessionStatus;
     private TextView? _repositoriesStatus;
     private ListView? _repositoriesList;
@@ -24,7 +22,7 @@ public sealed class MainActivity : Activity
     private Button? _signInButton;
     private Button? _signOutButton;
 
-    protected override async void OnCreate(Bundle? savedInstanceState)
+    protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
 
@@ -32,121 +30,114 @@ public sealed class MainActivity : Activity
         {
             Orientation = Orientation.Vertical
         };
+        root.SetPadding(32, 32, 32, 32);
+
         _sessionStatus = new TextView(this);
-        _sessionStatus.SetPadding(32, 24, 32, 8);
+        root.AddView(_sessionStatus);
+
         _agentEndpoint = new EditText(this)
         {
-            Hint = "https://agent.example.com/"
+            Hint = "https://agent.example.com"
         };
-        _agentEndpoint.SetPadding(32, 8, 32, 8);
+        root.AddView(_agentEndpoint);
+
         _accessToken = new EditText(this)
         {
             Hint = "Companion API access token",
-            InputType = InputTypes.ClassText | InputTypes.TextVariationPassword
+            InputType = global::Android.Text.InputTypes.ClassText | global::Android.Text.InputTypes.TextVariationPassword
         };
-        _accessToken.SetPadding(32, 8, 32, 8);
-        _signInButton = new Button(this) { Text = "Sign in to agent" };
-        _signInButton.SetPadding(32, 8, 32, 8);
-        _signInButton.Click += SignInButton_Click;
-        _signOutButton = new Button(this) { Text = "Sign out" };
-        _signOutButton.SetPadding(32, 8, 32, 8);
-        _signOutButton.Click += SignOutButton_Click;
-        _repositoriesStatus = new TextView(this) { Text = "Repositories are available after an authorized agent sign-in." };
-        _repositoriesStatus.SetPadding(32, 16, 32, 8);
-        _repositoriesList = new ListView(this);
-        _deploymentView = new DeploymentScreenView(this);
-        root.AddView(_sessionStatus);
-        root.AddView(_agentEndpoint);
         root.AddView(_accessToken);
+
+        _signInButton = new Button(this) { Text = "Sign in" };
+        _signInButton.Click += SignInButton_Click;
         root.AddView(_signInButton);
+
+        _signOutButton = new Button(this) { Text = "Sign out" };
+        _signOutButton.Click += SignOutButton_Click;
         root.AddView(_signOutButton);
+
+        _repositoriesStatus = new TextView(this);
         root.AddView(_repositoriesStatus);
-        root.AddView(_repositoriesList, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
-        root.AddView(_deploymentView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1));
+
+        _repositoriesList = new ListView(this);
+        root.AddView(_repositoriesList, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MatchParent,
+            0,
+            1));
+
+        _deploymentView = new CompanionDeploymentView(this);
+        root.AddView(_deploymentView);
+
         SetContentView(root);
 
-        var accessTokenStore = AndroidAccessTokenStoreFactory.Create(this);
-        _sessionLifecycle = new CompanionSessionLifecycle(accessTokenStore);
-        var hasProtectedSession = false;
-        try
-        {
-            hasProtectedSession = await _sessionLifecycle.RestoreAsync(CancellationToken.None);
-        }
-        catch
-        {
-            // A missing/invalidated Keystore key must degrade to re-authentication, never to
-            // plaintext persistence or a less secure credential path.
-            await _sessionLifecycle.SignOutAsync(CancellationToken.None);
-        }
-
-        RenderSessionState(hasProtectedSession);
-        RenderRepositories(Array.Empty<CompanionRepository>(), hasProtectedSession
-            ? "Protected session restored. Enter the agent endpoint again to refresh repositories."
-            : "Repositories are available after an authorized agent sign-in.");
-        RenderDeploymentState(hasProtectedSession);
+        var tokenStore = AndroidAccessTokenStoreFactory.Create(this);
+        _sessionLifecycle = new CompanionSessionLifecycle(tokenStore);
+        _ = RestoreSessionAsync();
     }
 
     private async void SignInButton_Click(object? sender, EventArgs e)
     {
-        if (_sessionLifecycle is null || _signInButton is null || _agentEndpoint is null || _accessToken is null)
+        if (_sessionLifecycle is null || _agentEndpoint is null || _accessToken is null)
             return;
 
-        var endpointText = _agentEndpoint.Text?.Trim();
-        var token = _accessToken.Text?.Trim();
+        var endpointText = _agentEndpoint.Text?.Trim() ?? string.Empty;
+        var token = _accessToken.Text ?? string.Empty;
         if (!Uri.TryCreate(endpointText, UriKind.Absolute, out var endpoint) || string.IsNullOrWhiteSpace(token))
         {
-            _sessionStatus!.Text = "Enter a valid HTTPS agent endpoint and companion API access token.";
+            RenderSessionState(false);
+            RenderRepositories([], "Enter a valid HTTPS agent endpoint and access token.");
             return;
         }
 
-        _signInButton.Enabled = false;
         try
         {
-            // Store through the Keystore-backed boundary first so the same token source is used by
-            // the authenticated API client. Any validation failure immediately clears the session.
-            await _sessionLifecycle.SignInAsync(token, CancellationToken.None);
+            await _sessionLifecycle.SignInAsync(token);
+            using var http = new HttpClient();
+            var client = new CompanionDeploymentHttpClient(http, endpoint, _sessionLifecycle.TokenStore);
+            var repositories = await client.GetRepositoriesAsync();
             _accessToken.Text = string.Empty;
-
-            var tokenStore = AndroidAccessTokenStoreFactory.Create(this);
-            using var httpClient = new HttpClient { BaseAddress = endpoint };
-            var api = new CompanionDeploymentHttpClient(httpClient, tokenStore);
-            var repositories = await api.GetRepositoriesAsync(CancellationToken.None);
-
             RenderSessionState(true);
             RenderRepositories(repositories, repositories.Count == 0
-                ? "Authorized agent returned no repositories."
-                : $"{repositories.Count} authorized repositor{(repositories.Count == 1 ? "y" : "ies")} available.");
+                ? "Signed in. No repositories are authorized for this companion session."
+                : $"Signed in. {repositories.Count} authorized repositories available.");
             RenderDeploymentState(true);
         }
         catch (Exception ex)
         {
-            await _sessionLifecycle.SignOutAsync(CancellationToken.None);
+            await _sessionLifecycle.SignOutAsync();
             RenderSessionState(false);
-            RenderRepositories(Array.Empty<CompanionRepository>(), "Repository access requires a valid authorized session.");
+            RenderRepositories([], $"Sign-in validation failed: {ex.Message}");
             RenderDeploymentState(false);
-            _sessionStatus!.Text = $"Agent sign-in failed: {ex.Message}";
-        }
-        finally
-        {
-            _signInButton.Enabled = true;
         }
     }
 
     private async void SignOutButton_Click(object? sender, EventArgs e)
     {
-        if (_sessionLifecycle is null || _signOutButton is null) return;
+        if (_sessionLifecycle is null) return;
+        await _sessionLifecycle.SignOutAsync();
+        RenderSessionState(false);
+        RenderRepositories([], "Signed out. Repository data cleared from the companion surface.");
+        RenderDeploymentState(false);
+    }
 
-        _signOutButton.Enabled = false;
+    private async Task RestoreSessionAsync()
+    {
+        if (_sessionLifecycle is null) return;
         try
         {
-            await _sessionLifecycle.SignOutAsync(CancellationToken.None);
-            RenderSessionState(false);
-            RenderRepositories(Array.Empty<CompanionRepository>(), "Repositories are hidden after sign-out.");
-            RenderDeploymentState(false);
+            var hasSession = await _sessionLifecycle.RestoreAsync();
+            RenderSessionState(hasSession);
+            RenderRepositories([], hasSession
+                ? "Protected session restored. Enter the agent endpoint to refresh authorized repositories."
+                : "Sign in to load repositories authorized by the companion agent.");
+            RenderDeploymentState(hasSession);
         }
-        finally
+        catch (ProtectedAccessTokenInvalidatedException)
         {
-            _signOutButton.Enabled = true;
+            await _sessionLifecycle.SignOutAsync();
+            RenderSessionState(false);
+            RenderRepositories([], "Protected session was invalidated by Android Keystore. Sign in again.");
+            RenderDeploymentState(false);
         }
     }
 
@@ -172,7 +163,7 @@ public sealed class MainActivity : Activity
         var rows = repositories
             .Select(repository => $"{repository.DisplayName}  •  {repository.Branch}  •  {repository.HeadSha[..Math.Min(8, repository.HeadSha.Length)]}{(repository.HasChanges ? "  •  changes" : string.Empty)}")
             .ToArray();
-        _repositoriesList.Adapter = new ArrayAdapter<string>(this, Android.Resource.Layout.SimpleListItem1, rows);
+        _repositoriesList.Adapter = new ArrayAdapter<string>(this, global::Android.Resource.Layout.SimpleListItem1, rows);
         _repositoriesList.Visibility = rows.Length == 0 ? ViewStates.Gone : ViewStates.Visible;
     }
 
