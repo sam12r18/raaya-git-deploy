@@ -26,7 +26,7 @@ public sealed class AndroidKeystoreAccessTokenProtector : Java.Lang.Object, IPla
         ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var key = GetOrCreateKey();
+        using var key = GetOrCreateKey();
         using var cipher = Cipher.GetInstance(Transformation) ?? throw new CryptographicException("AES/GCM is unavailable on this Android device.");
         cipher.Init(CipherMode.EncryptMode, key);
         var iv = cipher.GetIV() ?? throw new CryptographicException("Android did not provide an AES/GCM IV.");
@@ -50,7 +50,7 @@ public sealed class AndroidKeystoreAccessTokenProtector : Java.Lang.Object, IPla
 
         var iv = protectedToken.AsSpan(1, ivLength).ToArray();
         var encrypted = protectedToken.AsSpan(1 + ivLength).ToArray();
-        var key = GetExistingKey() ?? throw new CryptographicException("The Android Keystore session key is unavailable. Sign in again.");
+        using var key = GetExistingKey() ?? throw new CryptographicException("The Android Keystore session key is unavailable. Sign in again.");
 
         using var cipher = Cipher.GetInstance(Transformation) ?? throw new CryptographicException("AES/GCM is unavailable on this Android device.");
         using var parameters = new GCMParameterSpec(TagLengthBits, iv);
@@ -87,8 +87,7 @@ public sealed class AndroidKeystoreAccessTokenProtector : Java.Lang.Object, IPla
 /// Persists only the already-encrypted Keystore payload in app-private SharedPreferences.
 /// Raw tokens and transport credentials are never written here.
 /// </summary>
-public sealed class AndroidProtectedAccessTokenPersistence
-    : Java.Lang.Object, IProtectedAccessTokenPersistence
+public sealed class AndroidProtectedAccessTokenPersistence : IProtectedAccessTokenPersistence
 {
     private const string PreferenceName = "raaya_git_deploy_secure_session";
     private const string TokenKey = "protected_companion_token";
