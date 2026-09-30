@@ -6,6 +6,7 @@ using Java.Security;
 using Javax.Crypto;
 using Javax.Crypto.Spec;
 using RaayaGitDeploy.Android.Core.Security;
+using AndroidCipherMode = Javax.Crypto.CipherMode;
 
 namespace RaayaGitDeploy.Android.Security;
 
@@ -28,7 +29,7 @@ public sealed class AndroidKeystoreAccessTokenProtector : Java.Lang.Object, IPla
 
         using var key = GetOrCreateKey();
         using var cipher = Cipher.GetInstance(Transformation) ?? throw new CryptographicException("AES/GCM is unavailable on this Android device.");
-        cipher.Init(CipherMode.EncryptMode, key);
+        cipher.Init(AndroidCipherMode.EncryptMode, key);
         var iv = cipher.GetIV() ?? throw new CryptographicException("Android did not provide an AES/GCM IV.");
         var encrypted = cipher.DoFinal(Encoding.UTF8.GetBytes(accessToken)) ?? throw new CryptographicException("Android Keystore encryption returned no data.");
 
@@ -54,7 +55,7 @@ public sealed class AndroidKeystoreAccessTokenProtector : Java.Lang.Object, IPla
 
         using var cipher = Cipher.GetInstance(Transformation) ?? throw new CryptographicException("AES/GCM is unavailable on this Android device.");
         using var parameters = new GCMParameterSpec(TagLengthBits, iv);
-        cipher.Init(CipherMode.DecryptMode, key, parameters);
+        cipher.Init(AndroidCipherMode.DecryptMode, key, parameters);
         var plaintext = cipher.DoFinal(encrypted) ?? throw new CryptographicException("Android Keystore decryption returned no data.");
         return Task.FromResult<string?>(Encoding.UTF8.GetString(plaintext));
     }
