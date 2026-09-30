@@ -7,6 +7,7 @@ using RaayaGitDeploy.Android.Core.Api;
 using RaayaGitDeploy.Android.Core.Security;
 using RaayaGitDeploy.Android.Core.Shell;
 using RaayaGitDeploy.Android.Security;
+using RaayaGitDeploy.Core.Companion;
 
 namespace RaayaGitDeploy.Android;
 
@@ -16,6 +17,8 @@ public sealed class MainActivity : Activity
     private DeploymentScreenView? _deploymentView;
     private CompanionSessionLifecycle? _sessionLifecycle;
     private TextView? _sessionStatus;
+    private TextView? _repositoriesStatus;
+    private ListView? _repositoriesList;
     private EditText? _agentEndpoint;
     private EditText? _accessToken;
     private Button? _signInButton;
@@ -48,12 +51,17 @@ public sealed class MainActivity : Activity
         _signOutButton = new Button(this) { Text = "Sign out" };
         _signOutButton.SetPadding(32, 8, 32, 8);
         _signOutButton.Click += SignOutButton_Click;
+        _repositoriesStatus = new TextView(this) { Text = "Repositories are available after an authorized agent sign-in." };
+        _repositoriesStatus.SetPadding(32, 16, 32, 8);
+        _repositoriesList = new ListView(this);
         _deploymentView = new DeploymentScreenView(this);
         root.AddView(_sessionStatus);
         root.AddView(_agentEndpoint);
         root.AddView(_accessToken);
         root.AddView(_signInButton);
         root.AddView(_signOutButton);
+        root.AddView(_repositoriesStatus);
+        root.AddView(_repositoriesList, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
         root.AddView(_deploymentView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1));
         SetContentView(root);
 
@@ -72,6 +80,9 @@ public sealed class MainActivity : Activity
         }
 
         RenderSessionState(hasProtectedSession);
+        RenderRepositories(Array.Empty<CompanionRepository>(), hasProtectedSession
+            ? "Protected session restored. Enter the agent endpoint again to refresh repositories."
+            : "Repositories are available after an authorized agent sign-in.");
         RenderDeploymentState(hasProtectedSession);
     }
 
@@ -99,15 +110,19 @@ public sealed class MainActivity : Activity
             var tokenStore = AndroidAccessTokenStoreFactory.Create(this);
             using var httpClient = new HttpClient { BaseAddress = endpoint };
             var api = new CompanionDeploymentHttpClient(httpClient, tokenStore);
-            await api.GetRepositoriesAsync(CancellationToken.None);
+            var repositories = await api.GetRepositoriesAsync(CancellationToken.None);
 
             RenderSessionState(true);
+            RenderRepositories(repositories, repositories.Count == 0
+                ? "Authorized agent returned no repositories."
+                : $"{repositories.Count} authorized repositor{(repositories.Count == 1 ? "y" : "ies")} available.");
             RenderDeploymentState(true);
         }
         catch (Exception ex)
         {
             await _sessionLifecycle.SignOutAsync(CancellationToken.None);
             RenderSessionState(false);
+            RenderRepositories(Array.Empty<CompanionRepository>(), "Repository access requires a valid authorized session.");
             RenderDeploymentState(false);
             _sessionStatus!.Text = $"Agent sign-in failed: {ex.Message}";
         }
@@ -126,6 +141,7 @@ public sealed class MainActivity : Activity
         {
             await _sessionLifecycle.SignOutAsync(CancellationToken.None);
             RenderSessionState(false);
+            RenderRepositories(Array.Empty<CompanionRepository>(), "Repositories are hidden after sign-out.");
             RenderDeploymentState(false);
         }
         finally
@@ -148,6 +164,18 @@ public sealed class MainActivity : Activity
         _accessToken.Visibility = hasProtectedSession ? ViewStates.Gone : ViewStates.Visible;
     }
 
+    private void RenderRepositories(IReadOnlyList<CompanionRepository> repositories, string status)
+    {
+        if (_repositoriesStatus is null || _repositoriesList is null) return;
+
+        _repositoriesStatus.Text = status;
+        var rows = repositories
+            .Select(repository => $"{repository.DisplayName}  •  {repository.Branch}  •  {repository.HeadSha[..Math.Min(8, repository.HeadSha.Length)]}{(repository.HasChanges ? "  •  changes" : string.Empty)}")
+            .ToArray();
+        _repositoriesList.Adapter = new ArrayAdapter<string>(this, Android.Resource.Layout.SimpleListItem1, rows);
+        _repositoriesList.Visibility = rows.Length == 0 ? ViewStates.Gone : ViewStates.Visible;
+    }
+
     private void RenderDeploymentState(bool hasProtectedSession)
     {
         if (_deploymentView is null) return;
@@ -156,7 +184,7 @@ public sealed class MainActivity : Activity
                 "Deployment",
                 hasProtectedSession ? "Session protected" : "Authentication required",
                 hasProtectedSession
-                    ? "Connect to the authorized agent to refresh deployment state."
+                    ? "Select an authorized repository and profile before requesting a Dry Run."
                     : "Sign in to the authorized companion agent to review or execute a deployment.",
                 CompanionDeploymentCardTone.Neutral,
                 false, false, false, null),
