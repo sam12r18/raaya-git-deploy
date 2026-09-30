@@ -16,8 +16,12 @@ public sealed partial class RepositoryWorkspacePage
     {
         try
         {
-            await CommitWorkflow.StageAsync(SelectedChanges(), CancellationToken.None);
-            RefreshGitMutationSurface("Selected change(s) staged.");
+            var selected = SelectedChanges();
+            if (selected.Count == 0)
+                throw new InvalidOperationException("Select one or more changed paths before staging.");
+
+            await CommitWorkflow.StageAsync(selected, CancellationToken.None);
+            RefreshGitMutationSurface($"Staged {selected.Count} selected path(s).");
         }
         catch (Exception ex)
         {
@@ -29,8 +33,12 @@ public sealed partial class RepositoryWorkspacePage
     {
         try
         {
-            await CommitWorkflow.UnstageAsync(SelectedChanges(), CancellationToken.None);
-            RefreshGitMutationSurface("Selected change(s) unstaged.");
+            var selected = SelectedChanges();
+            if (selected.Count == 0)
+                throw new InvalidOperationException("Select one or more changed paths before unstaging.");
+
+            await CommitWorkflow.UnstageAsync(selected, CancellationToken.None);
+            RefreshGitMutationSurface($"Unstaged {selected.Count} selected path(s).");
         }
         catch (Exception ex)
         {
@@ -42,10 +50,11 @@ public sealed partial class RepositoryWorkspacePage
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(CommitMessageTextBox.Text))
+            var message = CommitMessageTextBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(message))
                 throw new InvalidOperationException("Enter a commit message before committing staged changes.");
 
-            var sha = await CommitWorkflow.CommitAsync(CommitMessageTextBox.Text, CancellationToken.None);
+            var sha = await CommitWorkflow.CommitAsync(message, CancellationToken.None);
             CommitMessageTextBox.Text = string.Empty;
             ChangesList.SelectedItems.Clear();
             RefreshGitMutationSurface($"Commit created: {sha[..Math.Min(8, sha.Length)]}");
