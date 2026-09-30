@@ -8,22 +8,29 @@ public sealed partial class RepositoryWorkspacePage
 {
     private const double CommitBrowserCompactWidth = 900;
     private const double CommitBrowserNarrowWidth = 700;
+    private const double ServersCompactWidth = 760;
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
         CommitsWorkspace.SizeChanged += CommitsWorkspace_SizeChanged;
+        ServersWorkspace.SizeChanged += ServersWorkspace_SizeChanged;
         ApplyCommitBrowserResponsiveLayout(CommitsWorkspace.ActualWidth);
+        ApplyServersResponsiveLayout(ServersWorkspace.ActualWidth);
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         CommitsWorkspace.SizeChanged -= CommitsWorkspace_SizeChanged;
+        ServersWorkspace.SizeChanged -= ServersWorkspace_SizeChanged;
         base.OnNavigatedFrom(e);
     }
 
     private void CommitsWorkspace_SizeChanged(object sender, SizeChangedEventArgs e) =>
         ApplyCommitBrowserResponsiveLayout(e.NewSize.Width);
+
+    private void ServersWorkspace_SizeChanged(object sender, SizeChangedEventArgs e) =>
+        ApplyServersResponsiveLayout(e.NewSize.Width);
 
     private void ApplyCommitBrowserResponsiveLayout(double width)
     {
@@ -51,5 +58,17 @@ public sealed partial class RepositoryWorkspacePage
             grid.ColumnDefinitions[1].MinWidth = minimums.Paths;
             grid.ColumnDefinitions[2].MinWidth = minimums.Diff;
         }
+    }
+
+    private void ApplyServersResponsiveLayout(double width)
+    {
+        if (ServersWorkspace.ColumnDefinitions.Count < 2)
+            return;
+
+        // Keep the profile list and editor usable side-by-side while allowing the workspace
+        // to shrink with the window instead of enforcing the previous 220 + 320 px floor.
+        var compact = width > 0 && width < ServersCompactWidth;
+        ServersWorkspace.ColumnDefinitions[0].MinWidth = compact ? 140 : 220;
+        ServersWorkspace.ColumnDefinitions[1].MinWidth = compact ? 200 : 320;
     }
 }
